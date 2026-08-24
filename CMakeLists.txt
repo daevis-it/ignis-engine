@@ -1,24 +1,30 @@
 cmake_minimum_required(VERSION 3.10)
 project(IgnisEngine)
 
-# AGGIORNATO AL C++20
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 1. Directory di inclusione
 include_directories(include)
+include_directories(include/vendor) # Isola le librerie esterne
 
-# Raccoglie tutti i file .cpp di ImGui nella variabile IMGUI_SOURCES
-file(GLOB IMGUI_SOURCES "include/imgui/*.cpp")
+# 2. Raccogliamo i sorgenti dell'Engine in modo modulare
+# Nota: L'uso di GLOB_RECURSE è comodo, ma ricordati di ricaricare CMake se aggiungi nuovi file.
+file(GLOB IGNIS_APP_SOURCES "src/Ignis/*.cpp")
+file(GLOB_RECURSE IGNIS_CORE_SOURCES "src/Ignis/Core/*.cpp")
+file(GLOB_RECURSE IGNIS_IMGUI_SOURCES "src/Ignis/ImGui/*.cpp")
 
-# Compila l'eseguibile aggiungendo anche i sorgenti di ImGui
+# 3. Raccogliamo i sorgenti del Vendor
+set(VENDOR_SOURCES src/vendor/glad.c)
+file(GLOB VENDOR_IMGUI_SOURCES "src/vendor/imgui/*.cpp")
+
+# 4. Creazione dell'eseguibile unendo i moduli
 add_executable(ignis-engine
-        src/main.cpp
-        src/glad.c
-        src/Window.cpp
-        src/Application.cpp
-        src/Input.cpp
-        src/ImGuiLayer.cpp
-        ${IMGUI_SOURCES}
+        ${IGNIS_APP_SOURCES}
+        ${IGNIS_CORE_SOURCES}
+        ${IGNIS_IMGUI_SOURCES}
+        ${VENDOR_SOURCES}
+        ${VENDOR_IMGUI_SOURCES}
 )
 
 find_package(glfw3 REQUIRED)

@@ -10,7 +10,7 @@ class SandboxApplication : public Ignis::Application
 public:
     SandboxApplication()
     {
-        Ignis::Logger::Info("Sandbox avviato: sto usando Ignis come farebbe un gioco vero.");
+        IGNIS_INFO("Sandbox avviato: sto usando Ignis come farebbe un gioco vero.");
     }
 
     ~SandboxApplication() override = default;

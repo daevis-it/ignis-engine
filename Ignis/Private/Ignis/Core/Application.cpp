@@ -10,7 +10,7 @@ namespace Ignis {
     Application::Application() {
         s_Instance = this;
         if (!glfwInit()) {
-            Logger::Error("Errore durante l'inizializzazione di GLFW!");
+            IGNIS_CORE_ERROR("Errore durante l'inizializzazione di GLFW!");
         }
 
         m_Window = std::make_unique<Window>(800, 600, "Ignis Engine");
@@ -25,7 +25,7 @@ namespace Ignis {
     }
 
     void Application::OnEvent(Event& e) {
-        Logger::Info(e.ToString());
+        IGNIS_CORE_TRACE("{}", e.ToString());
 
         EventDispatcher dispatcher(e);
         dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& event) {

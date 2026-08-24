@@ -17,7 +17,7 @@ namespace Ignis
 
         m_Window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
         if (!m_Window) {
-            Logger::Error("Impossibile creare la finestra GLFW!");
+            IGNIS_CORE_ERROR("Impossibile creare la finestra GLFW!");
             return;
         }
 
@@ -102,7 +102,7 @@ namespace Ignis
             data.EventCallback(event);
         });
 
-        Logger::Info("Finestra creata con successo: {}x{}", width, height);
+        IGNIS_CORE_INFO("Finestra creata con successo: {}x{}", width, height);
     }
 
     Window::~Window() {

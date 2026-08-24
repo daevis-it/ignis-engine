@@ -4,12 +4,15 @@ Game engine 2D/3D scritto da zero in C++20, con Editor visivo integrato.
 Progetto personale a scopo di apprendimento: capire il **perché** dei motori moderni
 costruendone uno, non replicarne le feature.
 
-> **Stato attuale — iterazione #1 in corso. Task `01` completato.**
+> **Stato attuale — iterazione #1 in corso. Task `01` CHIUSO.**
 > Il progetto è stato ristrutturato da eseguibile monolitico a **tre target**
 > (`Ignis` libreria + `IgnisEditor` + `Sandbox`), con separazione **Public/Private** degli
-> header e dipendenze via **FetchContent**. Compila e linka su Linux/GCC; il codice
-> applicativo è ancora quello dell'iterazione #0, con i suoi bug noti — vedi
-> *Cosa non funziona ancora*.
+> header e dipendenze via **FetchContent**.
+> **Verificato su entrambi i bersagli:** Linux Mint / GCC 13 e Windows / MSVC, in
+> entrambi i casi da CLion. Il codice applicativo è ancora quello dell'iterazione #0,
+> con i suoi bug noti — vedi *Cosa non funziona ancora*.
+>
+> **Visual Studio 2026 non è supportato**, vedi *Trappole già pagate*.
 >
 > Quello che l'engine sa fare oggi: aprire una finestra OpenGL 3.3, ricevere eventi di
 > tastiera/mouse/finestra e smistarli, esporre un Input statico, loggare, e disegnare
@@ -38,7 +41,7 @@ fatto sono due cose diverse.
 | **Build** | CMake ≥ 3.20 + Ninja, con `CMakePresets.json` |
 | **Piattaforme** | Linux (sviluppo primario) e Windows (secondo bersaglio, non opzionale) |
 | **Compilatori** | GCC 13 su Linux · MSVC (Visual Studio 2026) su Windows |
-| **IDE** | CLion su Linux · Visual Studio / CLion su Windows |
+| **IDE** | **CLion su entrambi i sistemi.** Visual Studio 2026 non funziona con questo setup |
 | **Finestre e input** | GLFW 3.4 (via FetchContent) |
 | **Grafica** | OpenGL 3.3 Core Profile |
 | **GL loader** | GLAD (generato per GL 3.3 Core, versionato in `Ignis/vendor/glad/`) |
@@ -308,6 +311,15 @@ serva davvero.
 `libxrandr-dev`, `libxinerama-dev`, `libxcursor-dev`, `libxi-dev`: con `libglfw3-dev`
 precompilata non servivano, perché qualcun altro aveva già compilato. L'errore è esplicito
 (`RandR headers not found`), ma arriva a metà configure.
+
+**Visual Studio 2026 non digerisce questo progetto; CLion sì.** Su Windows il progetto
+configura e compila senza attriti da CLion con la toolchain MSVC, mentre aprendolo
+direttamente in VS 2026 dà problemi gravi. La causa non è ancora stata diagnosticata —
+i sospetti sono l'integrazione CMake di VS che ignora o reinterpreta `CMakePresets.json`,
+oppure il suo generator che entra in conflitto con Ninja. **CLion è l'IDE di riferimento
+su entrambi i sistemi**, il che ha anche il pregio di togliere una variabile: stesso
+editor, stessi preset, stesso comportamento sulle due macchine. Nota utile: RenderDoc e
+NSight si attaccano all'eseguibile, quindi non serve aver compilato da VS per usarli.
 
 **Cache CMake e GLOB.** Aggiungendo file a una directory raccolta con `file(GLOB)`, CMake
 usa i vecchi riferimenti finché non lo si ricarica a mano. **Risolto**: tutti i glob del

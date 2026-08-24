@@ -2,9 +2,9 @@
 #include "Ignis/Core/Application.h"
 
 // Includiamo i file di ImGui
-#include <imgui/imgui.h>
-#include <imgui/imgui_impl_glfw.h>
-#include <imgui/imgui_impl_opengl3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 #include <GLFW/glfw3.h>
 
 namespace Ignis

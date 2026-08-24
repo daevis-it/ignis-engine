@@ -1,7 +1,7 @@
 #include "Ignis/Core/Application.h"
 #include "Ignis/Core/Input.h"
 #include "Ignis/Core/Logger.h"
-#include <imgui/imgui.h>
+#include <imgui.h>
 
 namespace Ignis {
 

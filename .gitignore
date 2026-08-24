@@ -1,15 +1,25 @@
-
-# Configurazione IDE (CLion)
+# --- IDE ---
 .idea/
-cmake-build-*/
+.vs/
+.vscode/
+*.user
 
-# CMake e file di compilazione
+# --- Build ---
 build/
-CMakeCache.txt
-CMakeFiles/
-Makefile
-*.o
-*.out
+cmake-build-*/
+out/
+CMakeUserPresets.json
 
-# Eseguibile finale
-ignis-engine
+# --- Artefatti di compilazione ---
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.exe
+*.pdb
+*.ilk
+
+# --- Runtime ---
+imgui.ini

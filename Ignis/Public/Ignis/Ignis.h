@@ -1,0 +1,17 @@
+#pragma once
+
+// ══ Header ombrello ══
+//
+// È l'unica cosa che un client (editor o gioco) deve includere per usare Ignis.
+// NON include EntryPoint.h: quello va incluso una volta sola, nel file che
+// definisce CreateApplication(), altrimenti si finisce con più main() nel binario.
+
+#include "Ignis/Core/Logger.h"
+#include "Ignis/Core/Application.h"
+#include "Ignis/Core/Input.h"
+#include "Ignis/Core/Window.h"
+
+#include "Ignis/Events/Event.h"
+#include "Ignis/Events/ApplicationEvent.h"
+#include "Ignis/Events/KeyEvent.h"
+#include "Ignis/Events/MouseEvent.h"

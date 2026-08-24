@@ -1,31 +1,21 @@
-cmake_minimum_required(VERSION 3.10)
-project(IgnisEngine)
+cmake_minimum_required(VERSION 3.20)
+project(IgnisEngine LANGUAGES C CXX)
 
+# Decisione D5: C++20, non 23. std::format esiste su GCC 13 e su MSVC 2022+;
+# del C++23 i due compilatori supportano sottoinsiemi diversi.
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)          # niente estensioni GNU: portabilità verso MSVC
 
-# 1. Directory di inclusione
-include_directories(include)
-include_directories(include/vendor) # Isola le librerie esterne
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-# 2. Raccogliamo i sorgenti dell'Engine in modo modulare
-# Nota: L'uso di GLOB_RECURSE è comodo, ma ricordati di ricaricare CMake se aggiungi nuovi file.
-file(GLOB IGNIS_APP_SOURCES "src/Ignis/*.cpp")
-file(GLOB_RECURSE IGNIS_CORE_SOURCES "src/Ignis/Core/*.cpp")
-file(GLOB_RECURSE IGNIS_IMGUI_SOURCES "src/Ignis/ImGui/*.cpp")
+# Utile a clangd / CLion
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# 3. Raccogliamo i sorgenti del Vendor
-set(VENDOR_SOURCES src/vendor/glad.c)
-file(GLOB VENDOR_IMGUI_SOURCES "src/vendor/imgui/*.cpp")
+include(cmake/Dependencies.cmake)
 
-# 4. Creazione dell'eseguibile unendo i moduli
-add_executable(ignis-engine
-        ${IGNIS_APP_SOURCES}
-        ${IGNIS_CORE_SOURCES}
-        ${IGNIS_IMGUI_SOURCES}
-        ${VENDOR_SOURCES}
-        ${VENDOR_IMGUI_SOURCES}
-)
-
-find_package(glfw3 REQUIRED)
-target_link_libraries(ignis-engine glfw)
+add_subdirectory(Ignis)
+add_subdirectory(IgnisEditor)
+add_subdirectory(Sandbox)

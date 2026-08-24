@@ -1,0 +1,15 @@
+
+# Configurazione IDE (CLion)
+.idea/
+cmake-build-*/
+
+# CMake e file di compilazione
+build/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+*.o
+*.out
+
+# Eseguibile finale
+ignis-engine

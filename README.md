@@ -1,66 +1,349 @@
 # Ignis Engine
 
-**Ignis Engine** è un game engine 2D/3D personalizzato scritto in C++.
-Questo progetto nasce con un obiettivo didattico e architetturale: comprendere a fondo le logiche dei motori grafici moderni (come Unity e Unreal Engine) costruendone uno da zero, partendo da un framework 2D per poi espandersi al 3D, includendo un Editor visivo integrato.
+Game engine 2D/3D scritto da zero in C++20, con Editor visivo integrato.
+Progetto personale a scopo di apprendimento: capire il **perché** dei motori moderni
+costruendone uno, non replicarne le feature.
+
+> **Stato attuale — iterazione #1 in corso. Task `01` completato.**
+> Il progetto è stato ristrutturato da eseguibile monolitico a **tre target**
+> (`Ignis` libreria + `IgnisEditor` + `Sandbox`), con separazione **Public/Private** degli
+> header e dipendenze via **FetchContent**. Compila e linka su Linux/GCC; il codice
+> applicativo è ancora quello dell'iterazione #0, con i suoi bug noti — vedi
+> *Cosa non funziona ancora*.
+>
+> Quello che l'engine sa fare oggi: aprire una finestra OpenGL 3.3, ricevere eventi di
+> tastiera/mouse/finestra e smistarli, esporre un Input statico, loggare, e disegnare
+> l'interfaccia ImGui con docking e multi-viewport. **Non disegna ancora nulla di suo:**
+> non esiste un renderer.
 
 ---
 
-## 🛠️ Stack Tecnologico e Ambiente
+## Cos'è, e cosa non è
 
-*   **Linguaggio:** C++20 (Sfruttando funzionalità moderne come `std::format`).
-*   **Sistema Operativo:** Linux (Sviluppato su Linux Mint 22.3).
-*   **IDE:** JetBrains CLion.
-*   **Build System:** CMake (Minimo 3.10).
-*   **Sistema a Finestre e Input:** GLFW 3.
-*   **Grafica (API):** OpenGL 3.3 Core Profile.
-*   **OpenGL Loader:** GLAD (Generato per C/C++, OpenGL 3.3, Core profile).
-*   **Interfaccia Utente (GUI):** Dear ImGui (Ramo `docking` per supportare i Viewport).
+**È** un percorso di apprendimento deliberato. Ogni sottosistema viene costruito capendo
+il problema che risolve, non copiando una soluzione. Un giorno servirà a fare piccoli
+giochi indie 2D o 3D, e a insegnare game dev in famiglia.
 
----
-
-## 🏗️ Architettura del Progetto
-
-Il progetto segue il pattern classico dei motori grafici, basato su una forte separazione delle responsabilità.
-
-### Struttura delle Directory
-
-*   `src/`: Contiene tutti i file sorgente (`.cpp`, `.c`).
-*   `include/`: Contiene tutti gli header file (`.h`) e le librerie esterne (`glad`, `KHR`, `imgui`).
-
-### Core Components (Attuali)
-
-1.  **Application (`Application.h` / `.cpp`)**
-    *   Il cuore pulsante del motore. Mantiene in vita il processo tramite il **Game Loop**.
-    *   Usa il pattern **Singleton** per rendere accessibile l'istanza globale da qualsiasi punto.
-2.  **Window (`Window.h` / `.cpp`)**
-    *   Incapsula GLFW, crea la finestra nativa e imposta il contesto OpenGL. Inizializza GLAD.
-3.  **Input (`Input.h` / `.cpp`)**
-    *   Sistema di input statico e disaccoppiato. Permette di leggere tastiera e mouse ovunque, interrogando direttamente GLFW attraverso l'istanza di `Application`.
-4.  **Logger (`Logger.h`)**
-    *   Sistema di logging custom basato su `std::format` (C++20) per stampare messaggi formattati nel terminale, sostituendo il classico `std::cout`.
-5.  **ImGuiLayer (`ImGuiLayer.h` / `.cpp`)**
-    *   Gestisce l'inizializzazione e il rendering dell'interfaccia utente (Dear ImGui). Abilita funzionalità avanzate come Docking e Multi-Viewport, permettendo di trascinare le finestre dell'Editor fuori dalla finestra principale.
+**Non è** un concorrente di Unity, Unreal o Godot, e non prova a esserlo. Per i progetti
+seri si usa Unreal — questo motore esiste perché usare uno strumento e capire come è
+fatto sono due cose diverse.
 
 ---
 
-## 📜 Log delle Scelte Implementative
+## Stack e ambiente
 
-1.  **Standard C++20:** Adozione dello standard C++20 per garantire un codice più pulito ed espressivo, in linea con gli standard dell'industria AAA.
-2.  **OOP vs Procedurale:** Abbandonato il singolo file `main.cpp` procedurale a favore di una struttura a oggetti (`Application`, `Window`, `Layer`).
-3.  **Input Disaccoppiato:** Stile di input globale (es. `Input::IsKeyPressed()`) simile all'approccio di Unity.
+| | |
+|---|---|
+| **Linguaggio** | C++20 (`std::format`, `std::unique_ptr`, lambda, template variadici) |
+| **Build** | CMake ≥ 3.20 + Ninja, con `CMakePresets.json` |
+| **Piattaforme** | Linux (sviluppo primario) e Windows (secondo bersaglio, non opzionale) |
+| **Compilatori** | GCC 13 su Linux · MSVC (Visual Studio 2026) su Windows |
+| **IDE** | CLion su Linux · Visual Studio / CLion su Windows |
+| **Finestre e input** | GLFW 3.4 (via FetchContent) |
+| **Grafica** | OpenGL 3.3 Core Profile |
+| **GL loader** | GLAD (generato per GL 3.3 Core, versionato in `Ignis/vendor/glad/`) |
+| **Matematica** | GLM 1.0.1 (via FetchContent — dichiarata, non ancora usata) |
+| **GUI** | Dear ImGui, branch `docking`, pinnato a `fd13a1e8` |
+
+### Compilare
+
+```bash
+# Linux — una volta sola, gli header di sviluppo X11 e OpenGL
+sudo apt install build-essential cmake ninja-build \
+     libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+
+cmake --preset linux-gcc-debug          # la prima volta scarica GLFW, GLM, ImGui
+cmake --build build/linux-gcc-debug
+./build/linux-gcc-debug/bin/IgnisEditor
+```
+
+**`libglfw3-dev` non serve più**, e non va usata: GLFW viene compilata dai sorgenti insieme
+al progetto. Se l'hai installata da un'iterazione precedente puoi lasciarla, ma non è quella
+che finisce nel binario.
+
+Su Windows serve Visual Studio 2026 con il workload *Desktop development with C++*, più CMake
+e Ninja (entrambi inclusi nel workload). I preset usano il generator **Ninja** anche su
+Windows: va lanciato da un *Developer Command Prompt* (o da CLion/VS, che impostano
+l'ambiente MSVC da soli), altrimenti `cl.exe` non è nel PATH.
+
+```
+cmake --preset windows-msvc-debug
+cmake --build build/windows-msvc-debug
+```
 
 ---
 
-## ⚠️ Errori Comuni e Troubleshooting
+## Architettura
 
-*   **Libreria GLFW su Linux:** In caso di errori CMake su `glfw3`, installare i pacchetti dev (`sudo apt install libglfw3-dev`).
-*   **Ordine di Inclusione GLAD:** L'header `<glad/glad.h>` deve sempre precedere `<GLFW/glfw3.h>`.
-*   **Gestione File di ImGui:** Per il ramo *docking* di ImGui con OpenGL3, è fondamentale includere anche il file `imgui_impl_opengl3_loader.h` nella cartella di inclusione.
-*   **Cache di CMake (File Oggetto Sporchi):** Se si sostituiscono file fisici nel progetto (es. aggiornamento di una libreria come ImGui) mantenendo gli stessi nomi, CMake potrebbe usare i vecchi file compilati in memoria (`.o`). **Soluzione:** Eseguire sempre un "Clean Project" o eliminare manualmente la cartella `cmake-build-debug` prima di ricompilare.
+### I tre target
+
+```
+Ignis          libreria statica — il motore. Non conosce né l'editor né i giochi.
+IgnisEditor    eseguibile — un client. Linka Ignis.
+Sandbox        eseguibile — un secondo client. Linka Ignis.
+```
+
+**`Sandbox` non è un doppione dell'editor: è il test dei confini.** Con un solo target,
+un accoppiamento sbagliato resta invisibile perché tanto compila lo stesso. Con due client
+distinti sulla stessa libreria, il codice dell'editor che si infila nell'engine smette di
+compilare da qualche parte, e lo scopri subito invece che a tre fasi di distanza.
+
+### Public / Private
+
+```
+Ignis/
+├── Public/Ignis/…      ← header esposti ai client   (include dir PUBLIC)
+├── Private/Ignis/…     ← sorgenti e header interni  (include dir PRIVATE)
+└── vendor/glad/        ← target separato, codice generato
+```
+
+La separazione **non è una convenzione, è imposta dal compilatore**:
+`target_include_directories` espone solo `Public/`, quindi un client che prova a includere
+un header interno non trova il file. Errore di compilazione, non cattiva abitudine.
+
+> **Perché `Private/` ripete il livello `Ignis/`.** Sembra ridondanza da copia-incolla, ma
+> serve a mantenere **un vocabolario solo**. Se `Private/` non lo ripetesse, un header
+> interno si includerebbe come `"Core/Roba.h"` mentre tutto il resto del progetto usa
+> `"Ignis/Core/Roba.h"`: due modi di scrivere la stessa cosa a seconda di dove ti trovi.
+> Col livello ripetuto, **ogni include del progetto comincia per `Ignis/`**, pubblico o
+> privato che sia.
+
+Gli eseguibili hanno solo `Private/`: non esportano niente, quindi una `Public/` dichiarerebbe
+un'intenzione falsa. Nascerà se e quando qualcosa dovrà esporre.
+
+### Come parte il motore
+
+Il `main()` **non appartiene al client**. Vive in `EntryPoint.h`, che il client include una
+volta sola nel file dove definisce `CreateApplication()`:
+
+```
+main()                    ← in EntryPoint.h, dentro l'engine
+  └─ Ignis::CreateApplication()   ← factory implementata dal CLIENT
+       └─ new EditorApplication   ← deriva da Ignis::Application
+            └─ Application::Run() ← il game loop, dentro l'engine
+```
+
+> **Perché l'inversione.** Il ciclo di vita del processo è responsabilità del motore: se
+> domani l'avvio deve leggere un file di configurazione, aprire una console su Windows o
+> montare un VFS, quel codice va scritto una volta nell'engine, non copiato in ogni gioco.
+> Al client resta una sola domanda: *quale Application vuoi?*
+
+`EntryPoint.h` **non è incluso da `Ignis.h`** ed è deliberato: includerlo due volte
+produrrebbe due `main()` nello stesso binario.
+
+### Application
+
+Singleton di fatto (`Application::Get()`), possiede la finestra e fa girare il loop.
+Riceve gli eventi dalla `Window` attraverso una callback installata alla costruzione e li
+smista con l'`EventDispatcher`.
+
+### Window
+
+Incapsula GLFW: crea la finestra, imposta il contesto OpenGL 3.3 Core, inizializza GLAD e
+installa le callback native. Ogni callback recupera la propria `WindowData` con
+`glfwGetWindowUserPointer` e **traduce l'evento GLFW in un evento Ignis**, che spedisce
+all'`Application` tramite `EventCallback`.
+
+> **Perché il puntatore utente invece di una variabile globale.** Le callback GLFW sono
+> funzioni C: non possono catturare stato. Il puntatore utente è il canale che GLFW offre
+> per riattaccare l'oggetto C++ alla finestra che ha generato l'evento — ed è ciò che
+> permetterà di avere più finestre senza riscrivere niente.
+
+### Event system
+
+Gerarchia di eventi (`WindowClose`, `WindowResize`, `KeyPressed`, `MouseMoved`, …) con due
+assi indipendenti: il **tipo** (`EventType`, uno solo per evento) e le **categorie**
+(`EventCategory`, in bitmask, quindi più di una per evento).
+
+```cpp
+// Un evento di tastiera appartiene a DUE categorie contemporaneamente:
+int GetCategoryFlags() const override { return EventCategoryKeyboard | EventCategoryInput; }
+```
+
+> **Perché il bitmasking e non un secondo enum.** Un `KeyPressedEvent` è
+> *contemporaneamente* un evento di tastiera e un evento di input. Con un campo singolo
+> dovresti scegliere quale delle due verità scrivere; con i bit le tieni entrambe, e un
+> filtro "tutto ciò che è input, qualunque cosa sia" diventa un `AND` fra interi.
+
+L'`EventDispatcher` usa i template per confrontare il tipo runtime dell'evento con il tipo
+che una funzione sa gestire, e in caso di corrispondenza fa il cast e la chiama. Il flag
+`Handled` serve a fermare la propagazione — **oggi lo scrive solo l'`Application` e non lo
+legge nessuno**, perché manca il LayerStack (task `08`).
+
+### Input
+
+Interfaccia statica che interroga GLFW direttamente, disaccoppiata dagli eventi: gli eventi
+dicono *cos'è successo*, l'Input risponde a *com'è adesso*. Servono entrambi — il salto
+si fa sull'evento, il movimento continuo sullo stato.
+
+### Logger
+
+Logging su `std::format` (C++20), con template variadici per accettare argomenti tipizzati.
+Vedi *Cosa non funziona ancora*: c'è una trappola aperta nel modo in cui viene chiamato.
+
+### ImGuiLayer
+
+Inizializza Dear ImGui con i backend GLFW + OpenGL3, abilita **docking** e
+**multi-viewport** (finestre trascinabili fuori dall'applicazione). `Begin()` e `End()`
+delimitano il frame UI dentro il game loop.
+
+> **L'ordine di inizializzazione conta e non è documentato in nessun errore.**
+> `Window` installa le proprie callback GLFW nel costruttore; **poi**
+> `ImGuiLayer::Init()` chiama `ImGui_ImplGlfw_InitForOpenGL(window, true)`, e quel `true`
+> fa sì che ImGui installi le sue callback *salvando le precedenti e richiamandole a
+> catena*. Funziona solo perché la Window viene prima. Invertire i due passi farebbe
+> sparire silenziosamente tutti gli eventi dell'engine.
 
 ---
 
-## 🚀 Prossimi Passi
+## Decisioni consolidate
 
-1.  **Event System:** Implementazione di un sistema di eventi (Window Close, Key Press, Mouse Move) per gestire la comunicazione tra i moduli in modo reattivo (Observer pattern/Dispatching).
-2.  **Rendering 2D:** Astrazione delle API di OpenGL (Shader, Vertex Array, Buffer) per il rendering grafico.
+| # | Decisione | Perché |
+|---|---|---|
+| **D1** | Toolchain Windows: **MSVC** | Compilatore nativo, miglior supporto driver NVIDIA e tooling grafico. Più severo di GCC: fa emergere gli errori di portabilità invece di nasconderli. |
+| **D2** | Dipendenze via **FetchContent** | Versioni dichiarate nel CMake con commit precisi, scaricate e compilate al configure. Nessuna installazione a sistema, build riproducibile ovunque. |
+| **D3** | **GLAD resta versionato** | Non è una libreria che evolve: è codice *generato una volta* per GL 3.3 Core. Sta in `Ignis/vendor/glad/` come target separato, così i warning severi dell'engine non lo toccano. |
+| **D4** | **Tre target**, non uno | Vedi *Architettura*. `Sandbox` è il test che i confini esistano davvero. |
+| **D5** | **C++20**, non 23 | `std::format` esiste su GCC 13 e MSVC 2022+. Del C++23 i due compilatori supportano sottoinsiemi diversi: si finirebbe con codice che compila sul portatile e non sulla workstation. |
+| **D6** | **ImGui pinnato a un commit** | `docking` è un branch, non un tag: si muove. Un pin significa che fra sei mesi il repo compila ancora con l'ImGui su cui il codice è stato scritto. |
+| **D7** | **Astrazione RendererAPI rimandata** | OpenGL diretto dietro classi RAII. L'astrazione multi-API si introduce quando esiste una seconda API vera, non prima. |
+
+**Licenza: non ancora scelta.** Il repo è pubblico ma senza licenza è legalmente
+"tutti i diritti riservati": nessuno può riusare il codice né contribuire. Da decidere.
+
+---
+
+## Cosa non funziona ancora
+
+Elenco onesto di ciò che è rotto o assente. Ogni voce rimanda al task che la chiude
+(dettaglio in [`ROADMAP.md`](ROADMAP.md)).
+
+### Bug aperti
+
+**`glfwDestroyWindow` viene chiamato dopo `glfwTerminate`** → task `04`
+`~Application` termina GLFW nel corpo; **poi** i membri si distruggono in ordine inverso,
+quindi `~Window` prova a distruggere una finestra che `glfwTerminate` ha già liberato.
+GLFW risponde `GLFW_NOT_INITIALIZED` — e siccome non c'è nessuna `glfwSetErrorCallback`
+installata, **quell'errore non lo vede nessuno**. Funziona per caso, non per costruzione.
+
+**Il resize non aggiorna il viewport OpenGL** → task `05`
+`glViewport` non compare in nessun punto del progetto. Non si nota oggi perché si disegna
+solo un `glClear` e ImGui gestisce il proprio viewport, ma al primo triangolo esce fuori.
+In più si usa `glfwSetWindowSizeCallback`, che dà *screen coordinates*: per `glViewport`
+serve `glfwSetFramebufferSizeCallback`, e su schermi HiDPI i due numeri differiscono.
+
+**`Logger::Info(e.ToString())` è una mina innescata** → task `02`
+Passa una stringa costruita a runtime come *format string*. Oggi nessun `ToString()`
+contiene graffe, quindi passa. Il giorno che un evento stampa `{` o `}`, `std::vformat`
+lancia `format_error` e l'app muore in un punto che non c'entra niente con la causa.
+Va scritto `Logger::Info("{}", e.ToString())`.
+
+### Default silenziosi
+
+**`glfwInit()` fallito viene loggato e poi si prosegue comunque** → task `04`
+Verificato eseguendo `Sandbox` senza display:
+
+```
+[IGNIS INFO]: Avvio di Ignis Engine...
+[IGNIS ERRORE]: Errore durante l'inizializzazione di GLFW!
+[IGNIS ERRORE]: Impossibile creare la finestra GLFW!
+Sandbox: window.c:1088: glfwSetWindowFocusCallback: Assertion `window != NULL' failed.
+```
+
+Due errori corretti e ignorati, poi un abort dentro ImGui con un messaggio che non nomina
+nessuna delle due cause reali. È esattamente il costo di un errore che non ferma il flusso.
+
+**`gladLoadGLLoader` non è controllato** → task `04`
+Se fallisce, ogni puntatore a funzione GL resta nullo e la prima chiamata segfaulta senza
+una riga di spiegazione.
+
+**`Window::Window` in errore fa `return`** → task `05`
+Lascia l'oggetto in stato invalido, che l'`Application` usa allegramente.
+
+### Buchi architetturali
+
+- **Nessun LayerStack** → task `08`. `ImGuiLayer` è un membro concreto di `Application`;
+  `OnEvent` intercetta `WindowClose` e finisce lì. Il flag `Handled` non lo legge nessuno.
+- **`io.WantCaptureKeyboard` / `WantCaptureMouse` mai consultati** → task `09`.
+  Conseguenza pratica: scrivendo in un campo di testo di ImGui, il gioco riceve gli stessi
+  tasti. E `Input::IsKeyPressed(GLFW_KEY_ESCAPE)` nel loop polla GLFW ignorando ImGui.
+- **Nessun timestep, nessun VSync** → task `10`. Il loop gira libero bruciando CPU e GPU, e
+  non esiste un delta time da passare a nulla.
+- **Finestra hardcodata** a `800, 600, "Ignis Engine"` dentro il costruttore → task `11`.
+
+### Debiti minori
+
+- **`Window.h` espone `<glad/glad.h>` e `<GLFW/glfw3.h>`** → task `05`. Essendo un header
+  pubblico, ogni client che include Ignis si porta dentro tutto GLFW: l'engine non sta
+  nascondendo la sua libreria di finestre, la sta ridistribuendo. È il motivo per cui
+  oggi `target_link_libraries(Ignis PUBLIC …)` invece di `PRIVATE`.
+- **`EventType` dichiara sette valori che nessuno emette** → task `06`:
+  `WindowFocus`, `WindowLostFocus`, `WindowMoved`, `KeyTyped`, `AppTick`, `AppUpdate`,
+  `AppRender`. Un enum che promette cose inesistenti è documentazione falsa.
+- **`EventCategory` è un enum non-scoped** → task `06`: `Ignis::None` è un simbolo nudo nel
+  namespace, che prima o poi collide.
+- **`repeatCount` è hardcodato a 0 o 1** → task `05`, non conta le ripetizioni reali.
+- **`Event.h` usa `std::ostream` senza includere `<ostream>`** → task `06`. Compila per
+  inclusione transitiva, cioè per fortuna.
+- **Warning attivi in build.** `-Wall -Wextra` segnala parametri non usati in
+  `Window.cpp` (`scancode`, `mods`) e in `EntryPoint.h` (`argc`, `argv`). **Sono voluti e
+  restano visibili**: si azzerano ai task `05` e `11`, quando quei parametri cominceranno
+  a servire davvero. Silenziarli adesso vorrebbe dire nascondere un promemoria.
+
+---
+
+## Trappole già pagate
+
+**Ordine di inclusione GLAD.** `<glad/glad.h>` deve sempre precedere `<GLFW/glfw3.h>`:
+GLAD definisce i simboli OpenGL che GLFW altrimenti dichiara per conto suo, e il conflitto
+si manifesta come una valanga di errori di ridefinizione.
+
+**GLFW 3.4 su Linux vuole Wayland anche se usi X11.** Di default compila entrambi i
+backend, e quello Wayland pretende `wayland-scanner` in fase di *configure*: senza, la
+configure muore con `Failed to find wayland-scanner`. Mint gira su X11, quindi
+`cmake/Dependencies.cmake` forza `GLFW_BUILD_WAYLAND OFF`. Da riaccendere il giorno che
+serva davvero.
+
+**Gli header X11 di sviluppo servono comunque.** Compilando GLFW dai sorgenti servono
+`libxrandr-dev`, `libxinerama-dev`, `libxcursor-dev`, `libxi-dev`: con `libglfw3-dev`
+precompilata non servivano, perché qualcun altro aveva già compilato. L'errore è esplicito
+(`RandR headers not found`), ma arriva a metà configure.
+
+**Cache CMake e GLOB.** Aggiungendo file a una directory raccolta con `file(GLOB)`, CMake
+usa i vecchi riferimenti finché non lo si ricarica a mano. **Risolto**: tutti i glob del
+progetto usano `CONFIGURE_DEPENDS`, che li rivaluta a ogni build. Se qualcosa sembra
+ancora non essere compilato, il sospetto giusto è una cache sporca: cancellare
+`build/<preset>` è sempre sicuro.
+
+**MSVC e i commenti accentati.** I sorgenti sono in italiano, quindi contengono UTF-8.
+Senza `/utf-8` MSVC li interpreta nella codepage locale (warning C4819 e stringhe
+corrotte). La flag è in `Ignis/CMakeLists.txt` insieme a `/Zc:__cplusplus`, che serve
+perché altrimenti MSVC riporta `__cplusplus` fermo al 2003.
+
+---
+
+## Convenzioni
+
+- **Namespace `Ignis`** per tutto il codice del motore.
+- **`m_` per i membri**, `s_` per gli statici. Metodi in `PascalCase`.
+- **L'engine è una libreria, editor e giochi sono client.** Codice che serve solo
+  all'editor non entra in `Ignis`.
+- **Il vendor non si modifica.** Se servisse una patch, va documentata qui.
+- **Nessun percorso hardcodato nei sorgenti**: scene, asset e configurazioni stanno in file.
+- **Chi possiede una risorsa dichiara come si copia e come si sposta.** Ogni classe che
+  incapsula una risorsa GPU o di sistema deve dichiarare copy e move esplicitamente —
+  copy `= delete` di default. Una classe RAII copiabile per sbaglio produce doppie
+  `glDelete*` su ID condivisi: un bug che si manifesta fasi dopo, quando gli oggetti
+  finiscono nei contenitori. **Regola valida dal primo giorno del Renderer.**
+- **Una feature che compila su un solo sistema non è finita.**
+
+---
+
+## Dove sta la verità
+
+- **Questo README** descrive ciò che **funziona adesso**. Se qui c'è scritto che una cosa
+  c'è, deve esserci nel codice.
+- **[`ROADMAP.md`](ROADMAP.md)** descrive ciò che **verrà**: fasi, task, decisioni prese e
+  decisioni rimandate.
+- **Il codice batte entrambi.** Quando una scelta si appoggia a un'affermazione di questi
+  file, va verificata sui sorgenti. Sono la mappa, non il territorio.

@@ -11,7 +11,7 @@ public:
     EditorLayer() : Layer("EditorLayer") {}
 
     void OnAttach() override;
-    void OnUpdate() override;
+    void OnUpdate(Ignis::Timestep ts) override;
     void OnImGuiRender() override;
     void OnEvent(Ignis::Event& event) override;
 
@@ -24,4 +24,14 @@ private:
 
     char m_Testo[128] = "";
     bool m_MostraDemo  = true;
+
+    // --- misura del frame ---
+    float m_FrameTimeMs   = 0.0f;   // ultimo frame
+    float m_MediaMs       = 0.0f;   // media dell'ultimo secondo
+    float m_AccumuloSec   = 0.0f;
+    int   m_FrameNelSec   = 0;
+    float m_SommaMsNelSec = 0.0f;
+
+    // per provare il tetto al delta time
+    bool  m_StalloRichiesto = false;
 };

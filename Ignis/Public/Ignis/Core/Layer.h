@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Ignis/Core/Timestep.h"
 #include "Ignis/Events/Event.h"
 
 #include <string>
@@ -29,8 +30,10 @@ namespace Ignis
         virtual void OnAttach() {}
         virtual void OnDetach() {}
 
-        // Aggiornamento logico. Il Timestep arriva al task 10.
-        virtual void OnUpdate() {}
+        // Aggiornamento logico. Il Timestep è il tempo trascorso dal frame
+        // precedente: ogni movimento va moltiplicato per esso, altrimenti la
+        // velocità dipende da quanto è veloce la macchina.
+        virtual void OnUpdate(Timestep /*ts*/) {}
 
         // Disegno dell'interfaccia. SEPARATO da OnUpdate e non è ridondanza: il frame
         // ImGui è delimitato da Begin()/End(), e tutto ciò che disegna UI deve stare

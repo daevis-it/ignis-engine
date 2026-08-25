@@ -2,17 +2,45 @@
 
 #include <imgui.h>
 
+#include <chrono>
+#include <thread>
+
 void EditorLayer::OnAttach()
 {
     IGNIS_INFO("EditorLayer agganciato.");
 }
 
-void EditorLayer::OnUpdate()
+void EditorLayer::OnUpdate(Ignis::Timestep ts)
 {
-    // Polling: questo NON passa dal sistema di eventi, quindi non è filtrato da
-    // ImGui. È la differenza fra "cos'è successo" e "com'è adesso", e si vede bene
-    // nel pannello qui sotto: scrivendo nel campo di testo, il contatore degli eventi
-    // resta fermo mentre lo stato del tasto risulta comunque premuto.
+    m_FrameTimeMs = ts.GetMilliseconds();
+
+    // Media sull'ultimo secondo: il valore istantaneo balla troppo per essere letto.
+    m_SommaMsNelSec += m_FrameTimeMs;
+    ++m_FrameNelSec;
+    m_AccumuloSec += ts.GetSeconds();
+
+    if (m_AccumuloSec >= 1.0f)
+    {
+        m_MediaMs = m_SommaMsNelSec / static_cast<float>(m_FrameNelSec);
+
+        // Temporaneo, per verificare il task 10 anche senza guardare il pannello:
+        // va tolto quando il Timestep sarà dato per assodato.
+        IGNIS_INFO("frame medio: {:.2f} ms  ({:.0f} FPS su {} frame)",
+                   m_MediaMs, 1000.0f / m_MediaMs, m_FrameNelSec);
+
+        m_AccumuloSec   = 0.0f;
+        m_FrameNelSec   = 0;
+        m_SommaMsNelSec = 0.0f;
+    }
+
+    // Stallo simulato: serve a vedere il tetto al delta time entrare in funzione.
+    // Il frame DOPO questo deve arrivare troncato a 100 ms, non a ~1000.
+    if (m_StalloRichiesto)
+    {
+        m_StalloRichiesto = false;
+        IGNIS_WARN("Stallo simulato di 1 secondo: il prossimo delta dovrà essere troncato.");
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 }
 
 void EditorLayer::OnEvent(Ignis::Event& event)
@@ -65,6 +93,18 @@ void EditorLayer::OnImGuiRender()
         m_ClicRicevuti  = 0;
         m_UltimoKeyCode = 0;
     }
+
+    ImGui::Separator();
+    ImGui::Text("Frame corrente : %.2f ms", m_FrameTimeMs);
+    ImGui::Text("Media 1 secondo: %.2f ms  (%.0f FPS)", m_MediaMs,
+                m_MediaMs > 0.0f ? 1000.0f / m_MediaMs : 0.0f);
+    ImGui::TextWrapped("Con il VSync attivo la media deve stare intorno a 16.6 ms su uno "
+                       "schermo a 60 Hz. Senza, molto meno.");
+
+    if (ImGui::Button("Simula uno stallo di 1 secondo"))
+        m_StalloRichiesto = true;
+    ImGui::SameLine();
+    ImGui::TextDisabled("(il frame dopo va troncato a 100 ms)");
 
     ImGui::Separator();
     ImGui::Checkbox("Mostra la demo di ImGui", &m_MostraDemo);

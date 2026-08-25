@@ -27,6 +27,29 @@ target_link_libraries(Ignis
     PUBLIC  glm::glm
 )
 
+# ── Configurazione ──
+# IGNIS_DEBUG / IGNIS_RELEASE vengono da QUI, non da NDEBUG: un flag nostro lascia
+# libera la possibilità di una "Debug ottimizzata" o di una "Release con assert".
+# PUBLIC perché IGNIS_ASSERT vive in un header pubblico: anche i client ne dipendono.
+#
+# ENTRAMBE le configurazioni definiscono qualcosa, di proposito: Base.h fa #error se
+# non ne trova nessuna. Il 2026-08-25 questa riga è stata persa per tre task, e il
+# risultato è stato assert disattivati e TRACE spariti SENZA UN SEGNALE. Ora
+# perderla di nuovo significa non compilare.
+target_compile_definitions(Ignis PUBLIC
+    $<$<CONFIG:Debug>:IGNIS_DEBUG>
+    $<$<NOT:$<CONFIG:Debug>>:IGNIS_RELEASE>
+)
+
+# Precompiled header, solo per l'engine (editor e Sandbox sono pochi file).
+# CMake genera da sé l'unità di traduzione necessaria: non serve un ignispch.cpp.
+target_precompile_headers(Ignis PRIVATE Private/ignispch.h)
+
+# Il PCH non può essere verificato da un #error: lo dichiariamo al configure, così
+# se un giorno sparisse si vedrebbe nell'output invece che nei tempi di build.
+get_target_property(_ignis_pch Ignis PRECOMPILE_HEADERS)
+message(STATUS "Ignis: precompiled header = ${_ignis_pch}")
+
 if(MSVC)
     # /utf-8          i sorgenti hanno commenti accentati: senza questo MSVC li legge
     #                 nella codepage locale (C4819 e stringhe corrotte)

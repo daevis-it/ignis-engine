@@ -20,6 +20,20 @@
 #endif
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  Configurazione
+//
+//  IGNIS_DEBUG e IGNIS_RELEASE arrivano da CMake (target_compile_definitions).
+//  Il #error non è pedanteria: il 2026-08-25 quella riga di CMake è stata persa per
+//  tre task, e il risultato è stato assert disattivati e log di traccia spariti —
+//  SENZA UN SEGNALE, perché la mancanza di una macro non è un errore, è solo
+//  un #if che va sul ramo sbagliato. Adesso perderla di nuovo non compila.
+// ══════════════════════════════════════════════════════════════════════════════
+
+#if !defined(IGNIS_DEBUG) && !defined(IGNIS_RELEASE)
+    #error "Ne' IGNIS_DEBUG ne' IGNIS_RELEASE sono definite. Manca target_compile_definitions in Ignis/CMakeLists.txt?"
+#endif
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  Debug break
 //
 //  __builtin_trap() ferma il processo nel punto esatto: con GDB o CLion ti trovi

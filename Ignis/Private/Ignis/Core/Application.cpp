@@ -96,7 +96,22 @@ namespace Ignis {
     void Application::Run() {
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 
+        m_LastFrameTime = std::chrono::steady_clock::now();
+
         while (m_Running) {
+            const auto now = std::chrono::steady_clock::now();
+            float deltaSeconds = std::chrono::duration<float>(now - m_LastFrameTime).count();
+            m_LastFrameTime = now;
+
+            if (deltaSeconds > s_MaxTimestepSeconds)
+            {
+                IGNIS_CORE_TRACE("Delta time troncato: {:.3f}s -> {:.3f}s (stallo o breakpoint?)",
+                                 deltaSeconds, s_MaxTimestepSeconds);
+                deltaSeconds = s_MaxTimestepSeconds;
+            }
+
+            const Timestep timestep(deltaSeconds);
+
             if (Input::IsKeyPressed(KeyCode::Escape))
                 m_Running = false;
 
@@ -105,7 +120,7 @@ namespace Ignis {
             // Avanti: dal basso verso l'alto. Il gioco si aggiorna prima della UI
             // che lo mostra.
             for (auto& layer : m_LayerStack)
-                layer->OnUpdate();
+                layer->OnUpdate(timestep);
 
             m_ImGuiLayer->Begin();
 

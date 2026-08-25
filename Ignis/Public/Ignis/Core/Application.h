@@ -1,9 +1,11 @@
 #pragma once
 
 #include "Ignis/Core/LayerStack.h"
+#include "Ignis/Core/Timestep.h"
 #include "Ignis/Core/Window.h"
 #include "Ignis/ImGui/ImGuiLayer.h"
 #include "Ignis/Events/ApplicationEvent.h"
+#include <chrono>
 #include <memory>
 
 namespace Ignis {
@@ -52,6 +54,18 @@ namespace Ignis {
         // deve poter chiamare Begin()/End() a delimitare il frame — cosa che lo
         // stack, che sa solo di Layer generici, non può fare.
         ImGuiLayer* m_ImGuiLayer = nullptr;
+
+        // steady_clock e NON system_clock: quest'ultimo può saltare all'indietro per
+        // una sincronizzazione NTP o un cambio d'ora, e un delta time negativo fa
+        // cose molto strane in una simulazione. steady_clock è monotono per contratto.
+        std::chrono::steady_clock::time_point m_LastFrameTime{};
+
+        // Tetto al delta time. Se metti un breakpoint e riprendi dopo trenta secondi,
+        // il frame successivo avrebbe ts = 30.0 e qualunque cosa si muova
+        // attraverserebbe la mappa — con la fisica, esploderebbe. 0.1s equivale a
+        // 10 FPS: sotto quella soglia il tempo rallenta invece di saltare.
+        // Non è un default silenzioso: quando scatta viene loggato.
+        static constexpr float s_MaxTimestepSeconds = 0.1f;
         bool m_Running = true;
 
         static Application* s_Instance;

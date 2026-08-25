@@ -503,6 +503,23 @@ non un dito di più".
 > funzione 4.6 non compila su nessuna delle due. **La versione target di Ignis si cambia
 > rigenerando GLAD, non modificando i window hints.**
 
+**I viewport ImGui non funzionano su Linux, e il sintomo non punta alla causa.** Con
+`ImGuiConfigFlags_ViewportsEnable` un pannello trascinato fuori dalla finestra diventa una
+finestra del sistema operativo — e su Linux non riceve il focus della **tastiera**, mentre
+il mouse continua a funzionare perché ImGui ne traccia la posizione globalmente. Il sintomo
+osservato: **un campo di testo staccato si attiva col clic e poi non scrive**, come fosse in
+sola lettura. Dipende dal window manager ed è un problema aperto a monte
+([ocornut/imgui #2117](https://github.com/ocornut/imgui/issues/2117)).
+
+Lo stesso scenario espone un limite nostro: `Input::IsKeyPressed` interroga sempre la
+finestra principale, quindi con il focus su un pannello staccato **ESC non chiudeva
+l'applicazione**. Due sintomi diversi, una sola causa scatenante.
+
+I viewport sono quindi **disattivati** (vedi D14 in ROADMAP); il docking resta attivo.
+Il modo in cui la causa è stata isolata vale come metodo: commentare **una sola riga**
+(`ViewportsEnable`) e riprovare gli stessi test. Entrambi i sintomi sono spariti insieme —
+il che li ha legati a una causa sola, invece di lasciarli due bug distinti da inseguire.
+
 **I colori ANSI su Windows vanno chiesti.** Il terminale Windows moderno capisce le
 sequenze ANSI, ma solo dopo una `SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)`
 sull'handle giusto — `STD_ERROR_HANDLE`, dato che scriviamo su `cerr`. Senza, al posto dei

@@ -1,18 +1,24 @@
-#include "Ignis/Core/Application.h"
+#include "Ignis/Ignis.h"
 #include "Ignis/Core/EntryPoint.h"
 
-class EditorApplication : public Ignis::Application {
+#include "EditorLayer.h"
+
+#include <memory>
+
+class EditorApplication final : public Ignis::Application
+{
 public:
-    EditorApplication() {
-        // Inizializzazione specifica dell'Editor
+    EditorApplication()
+    {
+        // PushLayer e non PushOverlay: l'editor sta SOTTO l'ImGuiLayer, che deve
+        // poter consumare gli eventi prima che arrivino qui.
+        PushLayer(std::make_unique<EditorLayer>());
     }
 
-    ~EditorApplication() override {
-        // Cleanup specifico dell'Editor
-    }
+    ~EditorApplication() override = default;
 };
 
-// Implementazione del Factory Method
-Ignis::Application* Ignis::CreateApplication() {
+Ignis::Application* Ignis::CreateApplication()
+{
     return new EditorApplication();
 }

@@ -29,11 +29,17 @@ namespace Ignis {
         });
         m_Window->SetEventCallback([this](Event& e) { this->OnEvent(e); });
 
-        m_ImGuiLayer.Init();
+        // L'ImGuiLayer entra come overlay: essendo in cima, riceverà gli eventi per
+        // primo e potrà consumarli quando riguardano l'interfaccia.
+        auto imguiLayer = std::make_unique<ImGuiLayer>();
+        m_ImGuiLayer = imguiLayer.get();
+        PushOverlay(std::move(imguiLayer));
     }
 
     Application::~Application() {
-        m_ImGuiLayer.Shutdown();
+        // Niente Shutdown esplicito: ImGuiLayer::OnDetach lo fa, e lo chiama il
+        // LayerStack distruggendosi — che avviene PRIMA di ~Window, quindi con il
+        // contesto OpenGL ancora vivo. Vedi l'ordine dei membri in Application.h.
         // glfwTerminate() NON va più qui: la chiama ~GLFWContext, che per ordine di
         // dichiarazione dei membri gira DOPO ~Window. Vedi Application.h.
     }
@@ -101,7 +107,7 @@ namespace Ignis {
             for (auto& layer : m_LayerStack)
                 layer->OnUpdate();
 
-            m_ImGuiLayer.Begin();
+            m_ImGuiLayer->Begin();
 
             // Il dockspace PRIMA dei pannelli dei layer, così possono agganciarcisi.
             ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
@@ -109,8 +115,7 @@ namespace Ignis {
             for (auto& layer : m_LayerStack)
                 layer->OnImGuiRender();
 
-            ImGui::ShowDemoWindow();
-            m_ImGuiLayer.End();
+            m_ImGuiLayer->End();
 
             m_Window->Update();
         }

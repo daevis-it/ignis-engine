@@ -39,7 +39,16 @@ valle: una base propria per piccoli giochi indie e per insegnare game dev.
 
 | D13 | **Data-driven come forma mentis, non come slogan** | Deciso il 2026-08-25 | Il modello è quello sperimentato su Unreal: **il codice definisce i verbi, i dati definiscono tutto il resto**. C++ (e domani Vesta) dice *cosa un sistema sa fare*; i file dicono *quali entità esistono, con quali componenti, con quali valori*. Aggiungere contenuto non deve richiedere una ricompilazione, e una scena è un file, non codice. |
 
+| D14 | **Viewport ImGui disattivati; docking attivo** | Deciso il 2026-08-25 | I viewport (pannelli trascinabili fuori come finestre del sistema) si rompono su Linux in modo dipendente dal window manager: le finestre senza decorazioni che ImGui crea non ricevono il focus della **tastiera** — il mouse sì. Problema noto e aperto a monte (ocornut/imgui #2117, thread dedicato ai WM Linux; il maintainer: *"I am not a Linux user"*). Linux è il sistema di sviluppo primario: una feature che si rompe lì non ha posto. Il **docking**, che è la parte utile, resta attivo. Da rivalutare alla Fase 4. |
+
 ### Decisioni rimandate
+
+- **`Input` legato alla finestra principale** — `Input::IsKeyPressed` interroga sempre
+  `Application::Get().GetWindow()`. Con una finestra sola è corretto; con più finestre
+  (viewport ImGui, o un futuro multi-window) il polling non vede i tasti di quella che ha
+  davvero il focus. È il motivo per cui ESC non chiudeva l'app quando il focus era su un
+  pannello staccato. **Va risolto PRIMA di riattivare i viewport (D14), non dopo**:
+  altrimenti si riattiva una feature sopra un limite noto.
 
 - **Licenza** — nessuna per ora. Conseguenza: il repo è pubblico ma legalmente "tutti i
   diritti riservati", quindi nessuno può riusare il codice né contribuire. Da decidere

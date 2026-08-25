@@ -47,7 +47,11 @@ namespace Ignis {
         // se ne vada. Invertirli darebbe glDelete* su un contesto morto, in silenzio.
         LayerStack m_LayerStack;
 
-        ImGuiLayer m_ImGuiLayer;
+        // NON è più un membro concreto: l'ImGuiLayer è un overlay POSSEDUTO dallo
+        // stack. Questo è solo un riferimento osservatore, perché Application::Run
+        // deve poter chiamare Begin()/End() a delimitare il frame — cosa che lo
+        // stack, che sa solo di Layer generici, non può fare.
+        ImGuiLayer* m_ImGuiLayer = nullptr;
         bool m_Running = true;
 
         static Application* s_Instance;

@@ -115,6 +115,16 @@ un header interno non trova il file. Errore di compilazione, non cattiva abitudi
 > Col livello ripetuto, **ogni include del progetto comincia per `Ignis/`**, pubblico o
 > privato che sia.
 
+> **Una guardia in CMake impedisce gli omonimi.** Siccome `Public/` e `Private/` mappano
+> entrambe su `Ignis/...`, un file con lo stesso percorso relativo nelle due zone sarebbe
+> ambiguo: vincerebbe quello pubblico, primo negli include path, e la versione privata
+> verrebbe ignorata **senza un solo messaggio** — il classico "ho modificato il file e non
+> cambia niente". La configure ora fallisce con un errore esplicito.
+
+**`Private/ignispch.h` sta alla radice**, fuori dalla struttura `Private/Ignis/...`, e non è
+una svista: non è codice dell'engine ma un artefatto di build. Non ha namespace, non dichiara
+niente, e nessuno lo include a mano — lo forza CMake in testa a ogni unità di traduzione.
+
 Gli eseguibili hanno solo `Private/`: non esportano niente, quindi una `Public/` dichiarerebbe
 un'intenzione falsa. Nascerà se e quando qualcosa dovrà esporre.
 
@@ -615,6 +625,20 @@ non un dito di più".
 > generato per 4.5, perciò i simboli 4.6 non esistono nel progetto e una chiamata a una
 > funzione 4.6 non compila su nessuna delle due. **La versione target di Ignis si cambia
 > rigenerando GLAD, non modificando i window hints.**
+
+**`imgui.ini` nasce dove lanci l'eseguibile.** ImGui salva lì il layout dei pannelli —
+posizione, dimensione, struttura del docking — riscrivendolo ogni 5 secondi quando cambia.
+È il motivo per cui l'editor ritrova i pannelli dove li avevi lasciati, ed è nel
+`.gitignore`. Il percorso di default è **relativo alla directory di lavoro**, e il sorgente
+di ImGui avverte: *"most apps will want to lock this to an absolute path"*.
+
+> **Con `ApplicationSpecification::WorkingDirectory` questo diventerà un problema.** Il
+> giorno che il Launcher aprirà un progetto spostando la cwd, il layout dell'editor verrebbe
+> salvato **dentro la cartella del progetto** — uno diverso per progetto, con i pannelli che
+> cambiano posizione a seconda di cosa apri. Cura prevista alla Fase 5. Un gioco che usasse
+> ImGui per il debug può disattivare del tutto il salvataggio con `io.IniFilename = nullptr`.
+
+Il Sandbox non lo crea più: con `EnableImGui = false` non esiste nessun contesto ImGui.
 
 **I viewport ImGui non funzionano su Linux, e il sintomo non punta alla causa.** Con
 `ImGuiConfigFlags_ViewportsEnable` un pannello trascinato fuori dalla finestra diventa una

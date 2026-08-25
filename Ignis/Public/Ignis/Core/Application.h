@@ -2,9 +2,7 @@
 
 #include "Ignis/Core/Base.h"
 #include "Ignis/Core/LayerStack.h"
-#include "Ignis/Core/Timestep.h"
 #include "Ignis/Core/Window.h"
-#include "Ignis/ImGui/ImGuiLayer.h"
 #include "Ignis/Events/ApplicationEvent.h"
 #include <chrono>
 #include <memory>
@@ -15,6 +13,12 @@ namespace Ignis {
     // Definita in Private/: che sotto ci sia GLFW è un dettaglio interno
     // dell'engine, non qualcosa che un client debba sapere.
     class GLFWContext;
+
+    // Dichiarata in avanti e non inclusa: qui serve solo tenerne un PUNTATORE.
+    // Includere "Ignis/ImGui/ImGuiLayer.h" farebbe entrare ImGui nella catena di
+    // ogni client che include Application.h, per un tipo di cui basta il nome.
+    // Chi vuole chiamarne i metodi (GetImGuiLayer) include quell'header da sé.
+    class ImGuiLayer;
 
     // Gli argomenti della riga di comando, passati dall'engine al client.
     // Oggi nessuno li usa davvero: sono la GIUNTURA per il Launcher della Fase 5,
@@ -74,6 +78,10 @@ namespace Ignis {
         Layer* PushOverlay(std::unique_ptr<Layer> overlay);
 
         Window& GetWindow() { return *m_Window; }
+
+        // Può essere nullptr: con EnableImGui = false l'overlay non viene creato.
+        // Serve alla Fase 4, quando il viewport dell'editor vorrà SetBlockEvents(false).
+        ImGuiLayer* GetImGuiLayer() { return m_ImGuiLayer; }
         static Application& Get() { return *s_Instance; }
 
     private:

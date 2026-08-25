@@ -7,6 +7,21 @@ add_subdirectory(vendor/glad)
 file(GLOB_RECURSE IGNIS_PUBLIC_HEADERS CONFIGURE_DEPENDS "Public/*.h")
 file(GLOB_RECURSE IGNIS_PRIVATE_FILES  CONFIGURE_DEPENDS "Private/*.cpp" "Private/*.h")
 
+# ── Guardia: nessun file può esistere con lo STESSO percorso relativo in Public e
+# in Private. Entrambe le cartelle mappano su "Ignis/...", quindi un omonimo sarebbe
+# ambiguo: vincerebbe silenziosamente quello in Public, perché è il primo negli
+# include path, e la versione privata verrebbe ignorata senza un solo messaggio.
+# È il tipo di errore che si manifesta come "ho modificato il file e non cambia niente".
+foreach(_ignis_pub IN LISTS IGNIS_PUBLIC_HEADERS)
+    file(RELATIVE_PATH _ignis_rel "${CMAKE_CURRENT_SOURCE_DIR}/Public" "${_ignis_pub}")
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Private/${_ignis_rel}")
+        message(FATAL_ERROR
+            "Ignis: '${_ignis_rel}' esiste sia in Public/ sia in Private/. "
+            "L'include \"${_ignis_rel}\" sarebbe ambiguo e vincerebbe la versione "
+            "pubblica in silenzio. Rinominane una delle due.")
+    endif()
+endforeach()
+
 add_library(Ignis STATIC ${IGNIS_PUBLIC_HEADERS} ${IGNIS_PRIVATE_FILES})
 add_library(Ignis::Ignis ALIAS Ignis)
 

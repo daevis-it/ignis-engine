@@ -3,6 +3,12 @@
 // ══════════════════════════════════════════════════════════════════════════════
 //  Precompiled header — solo per il target Ignis (PRIVATE).
 //
+//  Sta in Private/ alla RADICE, fuori dalla struttura Private/Ignis/..., e non è
+//  una svista: non è codice dell'engine, è un artefatto di build. Non ha namespace,
+//  non dichiara niente, e NESSUNO lo include a mano — è CMake a forzarlo in testa a
+//  ogni unità di traduzione (target_precompile_headers). Metterlo dentro Ignis/
+//  suggerirebbe che faccia parte dell'API interna, che non è.
+//
 //  Qui dentro va SOLO ciò che è davvero universale e che non cambia mai:
 //  la libreria standard. Niente altro, per due motivi.
 //

@@ -43,6 +43,18 @@ valle: una base propria per piccoli giochi indie e per insegnare game dev.
 
 ### Decisioni rimandate
 
+- **`imgui.ini` è relativo alla directory di lavoro** — ImGui salva lì il layout dei
+  pannelli (posizione, dimensione, struttura del docking), riscrivendolo ogni 5 secondi
+  quando cambia. Il default `IniFilename = "imgui.ini"` è **relativo alla cwd**, e il
+  sorgente di ImGui stesso avverte: *"most apps will want to lock this to an absolute path"*.
+  Oggi è innocuo — il file nasce accanto all'eseguibile ed è nel `.gitignore`. **Diventa un
+  problema con il Launcher (Fase 5)**: cambiando cwd per aprire un progetto, il layout
+  dell'editor finirebbe *dentro la cartella del progetto dell'utente*, uno diverso per
+  progetto, con i pannelli che si spostano a seconda di cosa apri. Cura: puntare
+  `io.IniFilename` a un percorso stabile (accanto all'eseguibile o nella configurazione
+  dell'editor) **quando ci sarà il Launcher**, non prima. Per un gioco che usasse ImGui per
+  il debug, `io.IniFilename = nullptr` disattiva del tutto il salvataggio.
+
 - **`Input` legato alla finestra principale** — `Input::IsKeyPressed` interroga sempre
   `Application::Get().GetWindow()`. Con una finestra sola è corretto; con più finestre
   (viewport ImGui, o un futuro multi-window) il polling non vede i tasti di quella che ha
@@ -180,6 +192,26 @@ meccanismo — ricostruire un file da una copia vecchia:
    sintomo per tre task**: assert disattivati e log di traccia spariti, con la build verde.
    Ora `Base.h` contiene un `#error` che rende impossibile ripetere l'omissione in silenzio,
    e il configure dichiara il PCH.
+
+### Revisione strutturale di fine iterazione #1
+
+Controllo dell'albero Public/Private fatto alla chiusura, su segnalazione. Esito:
+
+- **Nessuna violazione del confine**: nessun header pubblico include un header privato, e
+  tutti gli include del progetto usano il prefisso `Ignis/` — il vocabolario unico regge.
+- **`Private/Ignis/Core/GLFWContext.h` è al posto giusto**: è privato di proposito (D-04) e
+  lo includono solo file dell'engine.
+- **`Private/ignispch.h` sta alla radice di Private**, fuori dalla struttura `Ignis/...`:
+  non è codice dell'engine ma un artefatto di build, nessuno lo include a mano (lo forza
+  CMake). Ora è documentato nel file stesso.
+- **Corretti due include superflui in `Application.h`** (header pubblico):
+  `Timestep.h` non serviva affatto, e `ImGuiLayer.h` serviva solo per un puntatore — ora è
+  una dichiarazione in avanti, con l'include vero spostato in `Application.cpp`. Verificato
+  che un client che include `Ignis.h` **non veda più ImGui**.
+- **Aggiunta una guardia in CMake**: `Public/` e `Private/` mappano entrambe su `Ignis/...`,
+  quindi un file con lo stesso percorso relativo nelle due zone sarebbe ambiguo e vincerebbe
+  in silenzio quello pubblico. Ora la configure fallisce con un messaggio esplicito.
+  *Verificata creando apposta un omonimo.*
 
 ### Iterazione #2 — da definire
 
@@ -339,7 +371,45 @@ di traduzione deve prevedere il conteggio fin dall'inizio**, altrimenti va cambi
 > Onestamente: è la voce con il rapporto sforzo/risultato peggiore dell'elenco. Vale la pena
 > solo se è un obiettivo vero, non un "sarebbe bello".
 
-### Moduli e plugin — molto più avanti
+### Plugin dell'editor: C++ o Vesta? — decisione rimandata
+
+Oggi `IgnisEditor` ha solo `Private/`, ed è corretto: non esporta niente. Ma il giorno che
+esistessero plugin, **la soluzione non è aggiungere `Public/` all'eseguibile**.
+
+> **Un eseguibile non si linka.** Un plugin non può includere gli header di `IgnisEditor` e
+> chiamarne le funzioni come farebbe con una libreria: servirebbe esportare i simboli
+> dall'eseguibile (`-rdynamic` su Linux, una import library su Windows), che funziona ma è
+> la strada fragile.
+
+**Se i plugin saranno C++**, la struttura è lo split in due target:
+
+```
+IgnisEditorCore    libreria — Public/ (API dei plugin) + Private/
+IgnisEditor        eseguibile — un guscio che la avvia
+```
+
+I plugin linkano la libreria, non l'eseguibile. È come è fatto Unreal: l'editor è una
+collezione di moduli, l'eseguibile è quasi vuoto.
+
+**Preparazione a costo zero, valida da subito:** tenere `EditorApp.cpp` minimale. Oggi sono
+quaranta righe; il giorno dello split il codice si sposta nella libreria e il guscio resta
+com'è. **Spaccare adesso** significherebbe inventare un'API per plugin che non esistono,
+senza sapere cosa vorranno fare.
+
+**Ma la strada più probabile è un'altra: plugin come script Vesta.** Un plugin C++ caricato
+dinamicamente impone tutto il campo minato dell'ABI (allocatori diversi ai due lati della
+DLL, RTTI che non si riconosce, eccezioni che non attraversano) e obbliga a **congelare
+l'API** proprio mentre l'engine cambia forma. Un plugin in AngelScript non ha nessuno di
+quei problemi: niente ABI, niente ricompilazione, e chi lo scrive usa **lo stesso linguaggio
+che già impara per fare i giochi** — molto più accessibile, per la fascia "super indie", di
+"compilati una DLL con le stesse flag dell'editor".
+
+**Se i plugin sono script, all'editor non serve mai una `Public/` in C++**: gli serve una
+superficie di scripting, che vive dentro Vesta (Fase 6).
+
+**Decisione da prendere quando arriverà il primo plugin vero**, non prima.
+
+### Moduli e plugin dell'engine — molto più avanti
 
 Vanno distinte due cose che si chiamano quasi allo stesso modo:
 

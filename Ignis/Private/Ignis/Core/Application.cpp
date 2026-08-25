@@ -4,6 +4,11 @@
 #include "Ignis/Core/Input.h"
 #include "Ignis/Core/Logger.h"
 
+// Application.h dichiara ImGuiLayer solo in avanti, per non far entrare ImGui nella
+// catena di ogni client. Qui serve il tipo completo (make_unique, Begin/End), e qui
+// è giusto averlo: siamo dentro l'engine.
+#include "Ignis/ImGui/ImGuiLayer.h"
+
 #include <format>
 #include <stdexcept>
 

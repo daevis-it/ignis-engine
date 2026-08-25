@@ -3,6 +3,8 @@
 #include "Ignis/Core/Logger.h"
 #include <imgui.h>
 
+#include "Ignis/Core/Base.h"
+
 namespace Ignis {
 
     Application* Application::s_Instance = nullptr;

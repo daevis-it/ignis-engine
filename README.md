@@ -4,13 +4,15 @@ Game engine 2D/3D scritto da zero in C++20, con Editor visivo integrato.
 Progetto personale a scopo di apprendimento: capire il **perché** dei motori moderni
 costruendone uno, non replicarne le feature.
 
-> **Stato attuale — iterazione #1 in corso. Task `01` CHIUSO.**
+> **Stato attuale — iterazione #1 in corso. Task `01` e `02` CHIUSI.**
 > Il progetto è stato ristrutturato da eseguibile monolitico a **tre target**
 > (`Ignis` libreria + `IgnisEditor` + `Sandbox`), con separazione **Public/Private** degli
 > header e dipendenze via **FetchContent**.
-> **Verificato su entrambi i bersagli:** Linux Mint / GCC 13 e Windows / MSVC, in
-> entrambi i casi da CLion. Il codice applicativo è ancora quello dell'iterazione #0,
-> con i suoi bug noti — vedi *Cosa non funziona ancora*.
+> Il **Logger** è stato riscritto: livelli, canali separati engine/client, colori,
+> e formato **verificato dal compilatore**.
+> **Tutto verificato su entrambi i bersagli:** Linux Mint / GCC 13 e Windows / MSVC, in
+> entrambi i casi da CLion. Il resto del codice applicativo è ancora quello
+> dell'iterazione #0, con i suoi bug noti — vedi *Cosa non funziona ancora*.
 >
 > **Visual Studio 2026 non è supportato**, vedi *Trappole già pagate*.
 >
@@ -181,8 +183,35 @@ si fa sull'evento, il movimento continuo sullo stato.
 
 ### Logger
 
-Logging su `std::format` (C++20), con template variadici per accettare argomenti tipizzati.
-Vedi *Cosa non funziona ancora*: c'è una trappola aperta nel modo in cui viene chiamato.
+Quattro livelli (`Trace`, `Info`, `Warn`, `Error`) e due canali indipendenti: `IGNIS_CORE_*`
+per il motore, `IGNIS_*` per il client. Output su `std::cerr`, con orario, colori, e
+`file:riga` su Warn ed Error.
+
+```cpp
+IGNIS_CORE_INFO("Finestra creata con successo: {}x{}", width, height);
+IGNIS_INFO("Sandbox avviato");            // dal gioco: prefisso [ APP ]
+Logger::SetLevel(LogLevel::Warn);         // zittisce Trace e Info
+```
+
+> **Il formato è verificato dal compilatore, e questo cancella un'intera categoria di bug.**
+> La firma prende `std::format_string<Args...>`, non `std::string_view`: una stringa
+> costruita a runtime **non compila più**, e un segnaposto in più degli argomenti è un
+> errore di compilazione invece di un'eccezione a runtime. Il vecchio
+> `Logger::Info(e.ToString())` oggi viene rifiutato con *"the value of … is not usable in
+> a constant expression"*.
+
+> **Perché `std::cerr` anche per l'informativo.** `cerr` non è bufferizzato. Quando il
+> motore segfaulta, le ultime righe scritte su `cout` resterebbero nel buffer e non
+> arriverebbero mai a schermo: si perderebbe esattamente il log che dice dov'eri.
+
+> **Perché macro e non chiamate dirette.** Solo una macro può sparire del tutto in Release
+> — argomenti compresi, che non vengono nemmeno valutati — e può catturare `__FILE__` e
+> `__LINE__` senza che tu li scriva ogni volta. `IGNIS_CORE_TRACE` in Release è
+> letteralmente `((void)0)`.
+
+I colori si attivano **solo se l'output è un terminale**: redirigendo su file i codici ANSI
+diventerebbero spazzatura dentro il file. Su Windows vanno anche abilitati esplicitamente
+(vedi *Trappole già pagate*).
 
 ### ImGuiLayer
 
@@ -234,12 +263,6 @@ installata, **quell'errore non lo vede nessuno**. Funziona per caso, non per cos
 solo un `glClear` e ImGui gestisce il proprio viewport, ma al primo triangolo esce fuori.
 In più si usa `glfwSetWindowSizeCallback`, che dà *screen coordinates*: per `glViewport`
 serve `glfwSetFramebufferSizeCallback`, e su schermi HiDPI i due numeri differiscono.
-
-**`Logger::Info(e.ToString())` è una mina innescata** → task `02`
-Passa una stringa costruita a runtime come *format string*. Oggi nessun `ToString()`
-contiene graffe, quindi passa. Il giorno che un evento stampa `{` o `}`, `std::vformat`
-lancia `format_error` e l'app muore in un punto che non c'entra niente con la causa.
-Va scritto `Logger::Info("{}", e.ToString())`.
 
 ### Default silenziosi
 
@@ -311,6 +334,17 @@ serva davvero.
 `libxrandr-dev`, `libxinerama-dev`, `libxcursor-dev`, `libxi-dev`: con `libglfw3-dev`
 precompilata non servivano, perché qualcun altro aveva già compilato. L'errore è esplicito
 (`RandR headers not found`), ma arriva a metà configure.
+
+**I colori ANSI su Windows vanno chiesti.** Il terminale Windows moderno capisce le
+sequenze ANSI, ma solo dopo una `SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)`
+sull'handle giusto — `STD_ERROR_HANDLE`, dato che scriviamo su `cerr`. Senza, al posto dei
+colori si vedono i codici grezzi (`←[32m`) sporcare ogni riga. Sta in `Logger::Init()`.
+
+**`localtime` sicura ha nomi diversi sui due compilatori.** `std::localtime` non è
+thread-safe, e le varianti che lo sono divergono: MSVC ha `localtime_s(&tm, &time)`, POSIX
+ha `localtime_r(&time, &tm)` — **argomenti invertiti**, non solo nome diverso. È isolata in
+un solo punto di `Logger.cpp`. È il tipo di divergenza che compila su una macchina e non
+sull'altra, quindi vale la regola: ogni volta che si tocca un'API di sistema, si controlla.
 
 **Visual Studio 2026 non digerisce questo progetto; CLion sì.** Su Windows il progetto
 configura e compila senza attriti da CLion con la toolchain MSVC, mentre aprendolo

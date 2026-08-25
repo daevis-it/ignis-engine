@@ -6,6 +6,7 @@
 // NON include EntryPoint.h: quello va incluso una volta sola, nel file che
 // definisce CreateApplication(), altrimenti si finisce con più main() nel binario.
 
+#include "Ignis/Core/Base.h"
 #include "Ignis/Core/Logger.h"
 #include "Ignis/Core/Application.h"
 #include "Ignis/Core/Input.h"

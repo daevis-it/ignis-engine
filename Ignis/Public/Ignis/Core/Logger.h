@@ -71,8 +71,8 @@ namespace Ignis
 //  Release (argomenti compresi, che quindi non vengono nemmeno valutati) e può
 //  catturare __FILE__ e __LINE__ senza che tu li scriva ogni volta.
 //
-//  NDEBUG è definito da CMake nelle build Release. Al task 03 diventerà
-//  IGNIS_DEBUG, insieme al resto delle macro di configurazione.
+//  IGNIS_DEBUG è definita da CMake (target_compile_definitions), non dedotta da
+//  NDEBUG: vedi Ignis/CMakeLists.txt.
 // ══════════════════════════════════════════════════════════════════════════════
 
 #define IGNIS_CORE_INFO(...)  ::Ignis::Logger::Log(::Ignis::LogSource::Core,   ::Ignis::LogLevel::Info,  __FILE__, __LINE__, __VA_ARGS__)
@@ -83,12 +83,12 @@ namespace Ignis
 #define IGNIS_WARN(...)       ::Ignis::Logger::Log(::Ignis::LogSource::Client, ::Ignis::LogLevel::Warn,  __FILE__, __LINE__, __VA_ARGS__)
 #define IGNIS_ERROR(...)      ::Ignis::Logger::Log(::Ignis::LogSource::Client, ::Ignis::LogLevel::Error, __FILE__, __LINE__, __VA_ARGS__)
 
-#if defined(NDEBUG)
+#if defined(IGNIS_DEBUG)
+    #define IGNIS_CORE_TRACE(...) ::Ignis::Logger::Log(::Ignis::LogSource::Core,   ::Ignis::LogLevel::Trace, __FILE__, __LINE__, __VA_ARGS__)
+    #define IGNIS_TRACE(...)      ::Ignis::Logger::Log(::Ignis::LogSource::Client, ::Ignis::LogLevel::Trace, __FILE__, __LINE__, __VA_ARGS__)
+#else
     // In Release il Trace non esiste: nessuna chiamata, nessuna valutazione degli
     // argomenti. Un log di traccia a ogni frame non deve costare niente in Release.
     #define IGNIS_CORE_TRACE(...) ((void)0)
     #define IGNIS_TRACE(...)      ((void)0)
-#else
-    #define IGNIS_CORE_TRACE(...) ::Ignis::Logger::Log(::Ignis::LogSource::Core,   ::Ignis::LogLevel::Trace, __FILE__, __LINE__, __VA_ARGS__)
-    #define IGNIS_TRACE(...)      ::Ignis::Logger::Log(::Ignis::LogSource::Client, ::Ignis::LogLevel::Trace, __FILE__, __LINE__, __VA_ARGS__)
 #endif

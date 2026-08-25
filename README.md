@@ -4,12 +4,14 @@ Game engine 2D/3D scritto da zero in C++20, con Editor visivo integrato.
 Progetto personale a scopo di apprendimento: capire il **perché** dei motori moderni
 costruendone uno, non replicarne le feature.
 
-> **Stato attuale — iterazione #1 in corso. Task `01` e `02` CHIUSI.**
+> **Stato attuale — iterazione #1 in corso. Task `01`, `02` e `03` CHIUSI.**
 > Il progetto è stato ristrutturato da eseguibile monolitico a **tre target**
 > (`Ignis` libreria + `IgnisEditor` + `Sandbox`), con separazione **Public/Private** degli
 > header e dipendenze via **FetchContent**.
 > Il **Logger** è stato riscritto: livelli, canali separati engine/client, colori,
-> e formato **verificato dal compilatore**.
+> e formato **verificato dal compilatore**. Aggiunti `Base.h` (macro di piattaforma,
+> `IGNIS_ASSERT`, `IGNIS_VERIFY`) e un **precompiled header** che taglia del ~39% il
+> tempo di ricompilazione dell'engine.
 > **Tutto verificato su entrambi i bersagli:** Linux Mint / GCC 13 e Windows / MSVC, in
 > entrambi i casi da CLion. Il resto del codice applicativo è ancora quello
 > dell'iterazione #0, con i suoi bug noti — vedi *Cosa non funziona ancora*.
@@ -212,6 +214,63 @@ Logger::SetLevel(LogLevel::Warn);         // zittisce Trace e Info
 I colori si attivano **solo se l'output è un terminale**: redirigendo su file i codici ANSI
 diventerebbero spazzatura dentro il file. Su Windows vanno anche abilitati esplicitamente
 (vedi *Trappole già pagate*).
+
+### Base.h — piattaforma, assert, debug break
+
+`IGNIS_PLATFORM_WINDOWS` / `IGNIS_PLATFORM_LINUX` dedotte dal compilatore, con un `#error`
+esplicito se non è nessuna delle due: meglio non compilare che compilare su un sistema mai
+testato. `IGNIS_DEBUG` arriva invece da **CMake** (`$<$<CONFIG:Debug>:IGNIS_DEBUG>`) e non
+da `NDEBUG`, così resta possibile un giorno fare una Debug ottimizzata o una Release con
+assert senza combattere contro lo standard.
+
+```cpp
+IGNIS_CORE_ASSERT(larghezza > 0, "Larghezza non valida: {} (attesa > 0)", larghezza);
+IGNIS_CORE_VERIFY(Inizializza(), "L'inizializzazione deve riuscire");
+```
+
+Output quando fallisce — condizione stringificata **e** messaggio con i valori veri:
+
+```
+[IGNIS][ERROR] ASSERT FALLITO:  larghezza > 0            (Application.cpp:46)
+[IGNIS][ERROR] Larghezza non valida: 0 (attesa > 0)      (Application.cpp:46)
+```
+
+> **Un assert non è la gestione di un errore, e confonderli è il modo più comune di
+> farsi male.** Un assert verifica un'**invariante interna**: se è falsa, il bug è nostro —
+> per questo può sparire in Release. Un file mancante, un `glfwInit` fallito, un puntatore
+> GL nullo **non sono invarianti**: sono condizioni del mondo reale, e vanno gestite sempre,
+> anche in Release. Questo non contraddice *niente default silenziosi*, lo precisa.
+
+> **Niente side effect dentro un assert.** `IGNIS_ASSERT(Inizializza(), …)` funziona in
+> Debug e in Release **non chiama più `Inizializza()`**. Per quei casi c'è `IGNIS_VERIFY`,
+> che valuta sempre la condizione e controlla solo in Debug. Verificato con due contatori
+> distinti: in Release `ASSERT` lascia il suo a 0, `VERIFY` porta il suo a 1.
+
+**Il messaggio dell'assert è obbligatorio**, e non per pedanteria: renderlo opzionale
+richiederebbe `__VA_OPT__`, che su MSVC funziona solo con `/Zc:preprocessor` — un flag con
+una storia di attriti proprio con `<Windows.h>`, che includiamo in `Logger.cpp`. Avrebbe
+aperto una divergenza fra i due compilatori dentro il meccanismo che serve quando qualcosa
+va storto.
+
+### Precompiled header
+
+`Ignis/Private/ignispch.h`, attivo solo sul target `Ignis` (editor e Sandbox sono un file
+ciascuno). Contiene **solo libreria standard**.
+
+| ricompilazione completa dell'engine | media su 3 misure |
+|---|---|
+| con PCH | **1,93 s** |
+| senza PCH | 3,15 s |
+
+> **Il guadagno non viene dal numero di file ma dal peso degli header.** Con cinque soli
+> `.cpp` sembrerebbe inutile, e invece taglia il 39%: `<format>` in C++20 è enorme e
+> `Logger.h` lo tira dentro in ogni unità di traduzione.
+
+Cosa **non** c'è dentro, deliberatamente: ImGui, GLFW e GLAD (li usano due file su cinque —
+metterli lì significherebbe che ogni file dell'engine si porta dentro OpenGL senza motivo),
+e neppure `Logger.h` / `Base.h`. Quest'ultima è una scelta di stile: renderebbe le macro
+disponibili ovunque senza include, ma nasconderebbe le dipendenze. **Il PCH è
+un'ottimizzazione, non un modo per smettere di scrivere gli include.**
 
 ### ImGuiLayer
 

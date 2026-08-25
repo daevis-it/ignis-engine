@@ -4,6 +4,20 @@
 #include "Ignis/Events/KeyEvent.h"
 #include "Ignis/Events/MouseEvent.h"
 
+#include <format>
+#include <stdexcept>
+
+namespace
+{
+    // glGetString può restituire nullptr se il contesto non è valido: passarlo
+    // direttamente a std::format sarebbe un crash mentre si diagnostica un crash.
+    const char* GLStringOrUnknown(unsigned int name)
+    {
+        const auto* value = glGetString(name);
+        return value ? reinterpret_cast<const char*>(value) : "(sconosciuto)";
+    }
+}
+
 namespace Ignis
 {
     Window::Window(int width, int height, const std::string& title) {
@@ -16,13 +30,37 @@ namespace Ignis
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
         m_Window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
-        if (!m_Window) {
-            IGNIS_CORE_ERROR("Impossibile creare la finestra GLFW!");
-            return;
+        if (!m_Window)
+        {
+            // Prima qui c'era un return: l'oggetto restava vivo ma invalido, e
+            // l'Application lo usava allegramente. Il dettaglio dell'errore GLFW
+            // è già passato dall'error callback installata in GLFWContext.
+            throw std::runtime_error(std::format(
+                "Impossibile creare la finestra GLFW ({}x{}, \"{}\"). "
+                "Il driver supporta OpenGL 3.3 Core?", width, height, title));
         }
 
         glfwMakeContextCurrent(m_Window);
-        gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+
+        if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
+        {
+            // ATTENZIONE: stiamo lanciando dal COSTRUTTORE, quindi ~Window NON verrà
+            // chiamato e la finestra appena creata resterebbe appesa. La chiudiamo
+            // a mano: è l'unico punto del codice in cui serve farlo.
+            glfwDestroyWindow(m_Window);
+            m_Window = nullptr;
+            throw std::runtime_error(
+                "gladLoadGLLoader() non riuscita: i puntatori alle funzioni OpenGL non "
+                "sono stati caricati. Senza questo controllo, la prima chiamata GL "
+                "sarebbe stata un segfault senza spiegazione.");
+        }
+
+        // Quale driver ci ha risposto davvero. Non è decorazione: il giorno che
+        // qualcosa renderizza diverso fra portatile e workstation, questa è la
+        // prima riga che si guarda.
+        IGNIS_CORE_INFO("OpenGL   Vendor: {}", GLStringOrUnknown(GL_VENDOR));
+        IGNIS_CORE_INFO("       Renderer: {}", GLStringOrUnknown(GL_RENDERER));
+        IGNIS_CORE_INFO("        Versione: {}", GLStringOrUnknown(GL_VERSION));
 
         // Diciamo a GLFW di associare la nostra struttura dati m_Data a questa finestra
         glfwSetWindowUserPointer(m_Window, &m_Data);

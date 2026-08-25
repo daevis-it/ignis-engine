@@ -1,9 +1,10 @@
 #include "Ignis/Core/Application.h"
+#include "Ignis/Core/Base.h"
+#include "Ignis/Core/GLFWContext.h"
 #include "Ignis/Core/Input.h"
 #include "Ignis/Core/Logger.h"
-#include <imgui.h>
 
-#include "Ignis/Core/Base.h"
+#include <imgui.h>
 
 namespace Ignis {
 
@@ -11,9 +12,10 @@ namespace Ignis {
 
     Application::Application() {
         s_Instance = this;
-        if (!glfwInit()) {
-            IGNIS_CORE_ERROR("Errore durante l'inizializzazione di GLFW!");
-        }
+
+        // Se GLFW non parte, il costruttore di GLFWContext lancia e l'avvio si
+        // ferma qui: non c'è nessun percorso in cui si prosegue con una GLFW morta.
+        m_GLFWContext = std::make_unique<GLFWContext>();
 
         m_Window = std::make_unique<Window>(800, 600, "Ignis Engine");
         m_Window->SetEventCallback([this](Event& e) { this->OnEvent(e); });
@@ -23,7 +25,8 @@ namespace Ignis {
 
     Application::~Application() {
         m_ImGuiLayer.Shutdown();
-        glfwTerminate();
+        // glfwTerminate() NON va più qui: la chiama ~GLFWContext, che per ordine di
+        // dichiarazione dei membri gira DOPO ~Window. Vedi Application.h.
     }
 
     void Application::OnEvent(Event& e) {
@@ -35,7 +38,7 @@ namespace Ignis {
         });
     }
 
-    bool Application::OnWindowClose(WindowCloseEvent& e) {
+    bool Application::OnWindowClose(WindowCloseEvent&) {
         m_Running = false;
         return true;
     }

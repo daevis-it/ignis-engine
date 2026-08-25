@@ -4,7 +4,7 @@ Game engine 2D/3D scritto da zero in C++20, con Editor visivo integrato.
 Progetto personale a scopo di apprendimento: capire il **perché** dei motori moderni
 costruendone uno, non replicarne le feature.
 
-> **Stato attuale — iterazione #1 in corso. Task `01`–`04` e `05a` CHIUSI.**
+> **Stato attuale — FASE 0 CHIUSA (task `01`–`05c`). Prossima: Fase 1.**
 > Il progetto è stato ristrutturato da eseguibile monolitico a **tre target**
 > (`Ignis` libreria + `IgnisEditor` + `Sandbox`), con separazione **Public/Private** degli
 > header e dipendenze via **FetchContent**.
@@ -204,6 +204,74 @@ Quel messaggio GLFW **esisteva già**: semplicemente non lo ascoltava nessuno.
 > costruttore*, e quando un costruttore lancia **il distruttore non viene chiamato**. La
 > finestra appena creata resterebbe appesa, quindi lì c'è una `glfwDestroyWindow` esplicita.
 > È l'unico punto del progetto in cui una pulizia manuale è corretta.
+
+### Window
+
+```cpp
+Window window({ .Title = "Ignis Engine", .Width = 1280, .Height = 720, .VSync = true });
+```
+
+`WindowProps` è un aggregato e non tre parametri sciolti: al task `11`
+l'`ApplicationSpecification` dovrà passarli, e **allargare una struct non tocca i punti di
+costruzione, mentre cambiare una firma li tocca tutti**.
+
+> **Le dimensioni sono PIXEL del framebuffer, non screen coordinates.**
+> `glfwCreateWindow` prende screen coords, ma dopo la creazione interroghiamo
+> `glfwGetFramebufferSize` e usiamo quelli. Su schermi HiDPI i due numeri divergono, e
+> `glViewport` vuole i pixel. Per lo stesso motivo il resize passa da
+> `glfwSetFramebufferSizeCallback` e **non** da `glfwSetWindowSizeCallback`.
+
+> **`glViewport` lo chiama `Application`, non `Window`.** La Window è il sistema di
+> finestre, non il renderer: emette l'evento e basta. Quando il Renderer esisterà si
+> prenderà quel compito senza che la Window cambi di una riga. `OnWindowResize` ritorna
+> `false`: l'evento **non** è consumato, perché il resize interessa anche a chi viene dopo.
+
+Verificato con un test che legge `GL_VIEWPORT` dopo un ridimensionamento programmatico:
+crea a 800×600, ridimensiona a 640×480. Con il fix il viewport segue; senza la chiamata a
+`glViewport` resta a 800×600.
+
+`Window` dichiara copy e move come `= delete`: possiede una `GLFWwindow*`, e copiarla
+darebbe due oggetti con lo stesso handle e una doppia `glfwDestroyWindow`. Il move sarebbe
+implementabile ma richiederebbe di ri-puntare `glfwSetWindowUserPointer` al nuovo indirizzo
+di `m_Data`: finché nessuno ne ha bisogno, **`= delete` è più onesto di un move
+sottilmente rotto**.
+
+### Input e keycode
+
+```cpp
+if (Input::IsKeyPressed(KeyCode::Escape)) { … }
+if (Input::IsMouseButtonPressed(MouseCode::ButtonLeft)) { … }
+```
+
+`KeyCodes.h` contiene 121 tasti ed è **generato** dai `#define` di `glfw3.h`, non trascritto
+a mano. I valori numerici coincidono con quelli GLFW di proposito, così la conversione è un
+cast invece di una tabella da mantenere allineata.
+
+> **Il prezzo di quella scorciatoia sono quattordici `static_assert` in `Input.cpp`**, sui
+> confini di ogni blocco della tabella:
+> ```cpp
+> static_assert(static_cast<int>(KeyCode::Escape) == GLFW_KEY_ESCAPE);
+> ```
+> Se un aggiornamento di GLFW cambiasse anche un solo valore, **il progetto smette di
+> compilare**. Senza, un tasto smetterebbe di funzionare e nessuno saprebbe perché.
+
+**Input ed eventi non si duplicano, si completano:** gli eventi dicono *cos'è successo* (il
+salto si fa lì), l'Input dice *com'è adesso* (il movimento continuo si fa qui). Chiedere lo
+stato dentro un evento è il modo classico di ottenere controlli che "saltano".
+
+### GLFW non è visibile ai client
+
+Nessun header pubblico include più glad, GLFW o ImGui. È bastato che `GLFWwindow` sia un
+**tipo opaco**: `struct GLFWwindow;` dichiarato in avanti regge un puntatore, e i ~920 KB
+di `glad.h` escono dall'API pubblica.
+
+Le include directory che il compilatore passa a `Sandbox` sono ora tre —
+`Sandbox/Private`, `Ignis/Public`, `glm-src` — e in `Ignis/CMakeLists.txt`
+`glad`, `glfw` e `imgui` sono passati da `PUBLIC` a `PRIVATE`.
+
+Verificato nei due sensi: un client che scrive `glfwInit()` **non compila**
+(*'glfwInit' was not declared in this scope*), lo stesso client con `KeyCode::Escape`
+compila.
 
 ### Event system
 

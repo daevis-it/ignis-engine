@@ -1,10 +1,13 @@
 #pragma once
+
 #include "Ignis/Events/Event.h"
+
 #include <format>
 
 namespace Ignis
 {
-    class MouseMovedEvent : public Event {
+    class MouseMovedEvent : public Event
+    {
     public:
         MouseMovedEvent(float x, float y) : m_MouseX(x), m_MouseY(y) {}
 
@@ -15,16 +18,15 @@ namespace Ignis
             return std::format("MouseMovedEvent: {}, {}", m_MouseX, m_MouseY);
         }
 
-        static EventType GetStaticType() { return EventType::MouseMoved; }
-        EventType GetEventType() const override { return GetStaticType(); }
-        const char* GetName() const override { return "MouseMoved"; }
-        int GetCategoryFlags() const override { return EventCategoryMouse | EventCategoryInput; }
+        IGNIS_EVENT_CLASS_TYPE(MouseMoved)
+        IGNIS_EVENT_CLASS_CATEGORY(EventCategory::Mouse | EventCategory::Input)
 
     private:
         float m_MouseX, m_MouseY;
     };
 
-    class MouseScrolledEvent : public Event {
+    class MouseScrolledEvent : public Event
+    {
     public:
         MouseScrolledEvent(float xOffset, float yOffset)
             : m_XOffset(xOffset), m_YOffset(yOffset) {}
@@ -36,49 +38,47 @@ namespace Ignis
             return std::format("MouseScrolledEvent: {}, {}", m_XOffset, m_YOffset);
         }
 
-        static EventType GetStaticType() { return EventType::MouseScrolled; }
-        EventType GetEventType() const override { return GetStaticType(); }
-        const char* GetName() const override { return "MouseScrolled"; }
-        int GetCategoryFlags() const override { return EventCategoryMouse | EventCategoryInput; }
+        IGNIS_EVENT_CLASS_TYPE(MouseScrolled)
+        IGNIS_EVENT_CLASS_CATEGORY(EventCategory::Mouse | EventCategory::Input)
 
     private:
         float m_XOffset, m_YOffset;
     };
 
-    // Classe base per i pulsanti del mouse
-    class MouseButtonEvent : public Event {
+    // Base per i pulsanti: TRE categorie insieme.
+    class MouseButtonEvent : public Event
+    {
     public:
         inline int GetMouseButton() const { return m_Button; }
-        int GetCategoryFlags() const override { return EventCategoryMouse | EventCategoryInput | EventCategoryMouseButton; }
+
+        IGNIS_EVENT_CLASS_CATEGORY(EventCategory::Mouse | EventCategory::Input | EventCategory::MouseButton)
 
     protected:
-        MouseButtonEvent(int button) : m_Button(button) {}
+        explicit MouseButtonEvent(int button) : m_Button(button) {}
         int m_Button;
     };
 
-    class MouseButtonPressedEvent : public MouseButtonEvent {
+    class MouseButtonPressedEvent : public MouseButtonEvent
+    {
     public:
-        MouseButtonPressedEvent(int button) : MouseButtonEvent(button) {}
+        explicit MouseButtonPressedEvent(int button) : MouseButtonEvent(button) {}
 
         std::string ToString() const override {
             return std::format("MouseButtonPressedEvent: {}", m_Button);
         }
 
-        static EventType GetStaticType() { return EventType::MouseButtonPressed; }
-        EventType GetEventType() const override { return GetStaticType(); }
-        const char* GetName() const override { return "MouseButtonPressed"; }
+        IGNIS_EVENT_CLASS_TYPE(MouseButtonPressed)
     };
 
-    class MouseButtonReleasedEvent : public MouseButtonEvent {
+    class MouseButtonReleasedEvent : public MouseButtonEvent
+    {
     public:
-        MouseButtonReleasedEvent(int button) : MouseButtonEvent(button) {}
+        explicit MouseButtonReleasedEvent(int button) : MouseButtonEvent(button) {}
 
         std::string ToString() const override {
             return std::format("MouseButtonReleasedEvent: {}", m_Button);
         }
 
-        static EventType GetStaticType() { return EventType::MouseButtonReleased; }
-        EventType GetEventType() const override { return GetStaticType(); }
-        const char* GetName() const override { return "MouseButtonReleased"; }
+        IGNIS_EVENT_CLASS_TYPE(MouseButtonReleased)
     };
 }

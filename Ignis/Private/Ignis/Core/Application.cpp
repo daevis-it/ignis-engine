@@ -38,9 +38,21 @@ namespace Ignis {
         // dichiarazione dei membri gira DOPO ~Window. Vedi Application.h.
     }
 
+    Layer* Application::PushLayer(std::unique_ptr<Layer> layer) {
+        return m_LayerStack.PushLayer(std::move(layer));
+    }
+
+    Layer* Application::PushOverlay(std::unique_ptr<Layer> overlay) {
+        return m_LayerStack.PushOverlay(std::move(overlay));
+    }
+
     void Application::OnEvent(Event& e) {
         IGNIS_CORE_TRACE("{}", e.ToString());
 
+        // Gli eventi di SISTEMA li gestisce l'Application, prima dei layer.
+        // WindowClose viene consumato di proposito: se un layer potesse trattenerlo,
+        // un bug in quel layer renderebbe l'applicazione impossibile da chiudere.
+        // WindowResize invece ritorna false e prosegue: interessa a tutti.
         EventDispatcher dispatcher(e);
         dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& event) {
             return this->OnWindowClose(event);
@@ -48,6 +60,15 @@ namespace Ignis {
         dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& event) {
             return this->OnWindowResize(event);
         });
+
+        // A RITROSO: dall'alto verso il basso. Il primo a ricevere l'evento è
+        // l'ultimo ad aver disegnato, cioè quello che l'utente vede davanti.
+        for (auto it = m_LayerStack.rbegin(); it != m_LayerStack.rend(); ++it)
+        {
+            if (e.Handled)
+                break;
+            (*it)->OnEvent(e);
+        }
     }
 
     bool Application::OnWindowClose(WindowCloseEvent&) {
@@ -75,8 +96,19 @@ namespace Ignis {
 
             glClear(GL_COLOR_BUFFER_BIT);
 
+            // Avanti: dal basso verso l'alto. Il gioco si aggiorna prima della UI
+            // che lo mostra.
+            for (auto& layer : m_LayerStack)
+                layer->OnUpdate();
+
             m_ImGuiLayer.Begin();
+
+            // Il dockspace PRIMA dei pannelli dei layer, così possono agganciarcisi.
             ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
+            for (auto& layer : m_LayerStack)
+                layer->OnImGuiRender();
+
             ImGui::ShowDemoWindow();
             m_ImGuiLayer.End();
 

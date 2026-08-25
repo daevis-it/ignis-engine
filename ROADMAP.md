@@ -33,6 +33,11 @@ valle: una base propria per piccoli giochi indie e per insegnare game dev.
 | D7 | Astrazione RendererAPI | Rimandata | OpenGL diretto in Fase 2, dietro classi RAII. L'astrazione multi-API si introduce quando esiste una seconda API vera, non prima. Vulkan non è "un'altra implementazione dietro la stessa interfaccia": command buffer, render pass e sincronizzazione esplicita cambierebbero l'interfaccia stessa. Le astrazioni multi-API scritte prima di conoscere la seconda API si buttano quasi sempre. |
 | D8 | **OpenGL 4.5 Core con DSA** (era 3.3) | Deciso il 2026-08-25 | Direct State Access elimina il modello *bind-to-edit*: `glNamedBufferData(id, …)` invece di `glBindBuffer` + `glBufferData`. Meno stato globale, meno bug da stato sporco, e un modello concettualmente più vicino a Vulkan/DX12. 4.5 e non 4.6 perché DSA è già completo in 4.5 e copre GPU dal 2014 invece che dal 2017 — utile se altri indie useranno l'engine. **Costo accettato: macOS resta fuori** (Apple è ferma a 4.1 e ha deprecato OpenGL nel 2018). |
 | D9 | Niente Vulkan, per ora | Deciso il 2026-08-25 | I concetti che l'engine deve insegnare — batching, scene graph, ECS, framebuffer, materiali — sono **identici** nelle due API. Vulkan aggiunge concetti di *driver* (swapchain, descriptor set, sincronizzazione) e circa mille righe prima del primo triangolo. In più richiede l'SDK LunarG installato a mano, contro la decisione D2. Ciò che sopravvivrebbe a un'eventuale migrazione — scena, ECS, asset, editor — è esattamente ciò che stiamo per costruire. |
+| D10 | **Campo d'azione: Linux e Windows desktop** | Deciso il 2026-08-25 | Fuori scope: macOS, Web/WebGL, console, mobile. Il web in particolare è **incompatibile con D8**: WebGL 2 è OpenGL ES 3.0 e DSA lì non esiste. Meglio un territorio piccolo, attuabile e testabile su due macchine vere che una compatibilità dichiarata e mai verificata. Steam Deck è Linux, quindi il grosso del gaming indie è coperto. Espansioni future (es. export Android) come **moduli**, se e quando serviranno. |
+| D11 | **Nessuna chiamata OpenGL fuori dalle classi wrapper** | Deciso il 2026-08-25 | Tutto GL vive dentro `Shader`, `Buffer`, `Texture`, `VertexArray`, `Framebuffer`. Non è l'astrazione multi-API di D7 — è più modesto e più utile: se un giorno servisse un backend diverso, si riscrivono cinque file invece di cercare `gl*` in tutto il progetto. Costa nulla oggi perché è comunque il modo pulito di scrivere il renderer. |
+| D12 | **Ogni libreria di terze parti sta dietro un'interfaccia dell'engine** | Deciso il 2026-08-25 | Generalizzazione di ciò che il task `05c` ha fatto con GLFW: i client non devono sapere quale libreria di finestre, audio, fisica o rete c'è sotto. Due effetti: le librerie diventano sostituibili, e l'API di Ignis resta piccola. |
+
+| D13 | **Data-driven come forma mentis, non come slogan** | Deciso il 2026-08-25 | Il modello è quello sperimentato su Unreal: **il codice definisce i verbi, i dati definiscono tutto il resto**. C++ (e domani Vesta) dice *cosa un sistema sa fare*; i file dicono *quali entità esistono, con quali componenti, con quali valori*. Aggiungere contenuto non deve richiedere una ricompilazione, e una scena è un file, non codice. |
 
 ### Decisioni rimandate
 
@@ -58,12 +63,12 @@ valle: una base propria per piccoli giochi indie e per insegnare game dev.
 
 ## Le sette fasi
 
-### Fase 0 — Revisione delle fondamenta *(in corso)*
+### Fase 0 — Revisione delle fondamenta — **CHIUSA il 2026-08-25**
 Non aggiunge una singola feature. Salda i debiti finché il progetto è embrionale e
 costano poco: ristrutturazione dell'albero, build a tre target portabile, correzione dei
 bug di ciclo di vita, pulizia di Logger ed Event system, README riscritto.
 
-### Fase 1 — Il guscio dell'applicazione
+### Fase 1 — Il guscio dell'applicazione *(prossima)*
 LayerStack, propagazione degli eventi a ritroso con `Handled`, ImGuiLayer come layer vero
 con cattura dell'input, Timestep nel game loop, `ApplicationSpecification` con argomenti
 da riga di comando. Da qui in poi ogni sistema nuovo ha un posto dove nascere.
@@ -81,6 +86,27 @@ ma resta copiabile per default. Poi `Renderer2D` con batching e `OrthographicCam
 Entità e componenti (`Transform`, `SpriteRenderer`, `Camera`, `Tag`), `Scene` che li
 aggiorna e li disegna, serializzazione su file di testo. Qui l'engine smette di essere
 una demo e comincia a contenere qualcosa.
+
+> **Cosa impone D13 all'ECS, e perché va saputo prima di scriverlo.**
+> Perché il data-driven funzioni davvero, un componente deve essere tre cose insieme:
+> 1. **dato puro** — nessuna logica dentro; la logica sta nei sistemi;
+> 2. **serializzabile** — scrivibile e rileggibile da file;
+> 3. **ispezionabile senza codice UI scritto a mano** — è la reflection di Vesta a generare
+>    il pannello dell'Inspector.
+>
+> Il terzo punto è il discrimine vero. **Se aggiungere un componente costasse mezz'ora di
+> codice per disegnarne il pannello, il data-driven morirebbe per attrito** e si finirebbe a
+> scrivere tutto in C++ — cioè l'opposto dell'obiettivo.
+>
+> **Nota la convergenza:** serializzabilità e reflection servono *contemporaneamente*
+> all'editor (Inspector), al salvataggio, al networking (D-networking) e al replay. Un solo
+> meccanismo, quattro benefici — ed è la ragione per cui vale la pena farlo bene.
+>
+> **LA decisione della Fase 3, da prendere allora ma da avere in testa ora:** componenti
+> come dato puro con la logica nei *sistemi* (ECS in senso stretto), oppure componenti che
+> contengono anche comportamento (il modello `MonoBehaviour` di Unity, o i nodi di Godot).
+> Il primo è più adatto al networking e alla serializzazione; il secondo è più immediato per
+> chi arriva da Unity. **Non è una scelta di implementazione: è la forma dell'engine.**
 
 ### Fase 4 — Editor
 Rendering della scena dentro un framebuffer mostrato in un pannello ImGui, Scene
@@ -190,6 +216,174 @@ Nome, dimensioni, working directory e `CommandLineArgs` — la giuntura per il L
 percorso: è impalcatura, non arredo.
 
 ---
+
+## Sistemi da integrare
+
+Valutazioni fatte il 2026-08-25, **da riverificare al momento dell'uso**: le librerie si
+muovono, e una raccomandazione di un anno fa è un'ipotesi, non un fatto.
+Vale per tutte la decisione **D12**: stanno dietro un'interfaccia nostra.
+
+### Audio — Fase 4/5
+
+**miniaudio** è la raccomandazione. Single-header, dominio pubblico, zero dipendenze, e si
+porta dietro i backend nativi di ogni sistema (WASAPI su Windows, ALSA/PulseAudio su Linux).
+Ha due livelli: uno basso per il device, e `ma_engine` di alto livello con **audio spaziale
+3D già dentro** — che copre "basilare ma funzionale" per entrambi i target 2D e 3D.
+
+Alternative: **SoLoud** (più alto livello, voci e fade pronti, ma una dipendenza da
+compilare in più); **OpenAL Soft** (standard per l'audio posizionale, API vecchia e più
+cerimonia); FMOD/Wwise (commerciali, fuori scala).
+
+> Il pezzo difficile dell'audio non è farlo suonare: è il **threading**. Il callback audio
+> gira su un thread ad alta priorità dove non si può allocare, non si può prendere un lock e
+> non si può loggare — violarlo produce crackle che sembrano bug di altro. Il nostro strato
+> deve rendere difficile sbagliarlo.
+
+### Importazione asset — Fase 5
+
+**2D:** `stb_image` per PNG/JPG. Single-header, standard di fatto.
+
+**3D:** qui c'è una decisione architetturale prima che una di libreria.
+
+> **L'importazione appartiene all'EDITOR, non al runtime.** Un gioco spedito non deve saper
+> leggere FBX: carica un formato nostro, già ottimizzato. L'editor importa (FBX, OBJ, glTF)
+> e converte una volta sola. È la struttura di tutti gli engine seri, ed è coerente con la
+> separazione engine/editor che abbiamo già: **l'importer è codice dell'editor**.
+
+Per l'importer: **Assimp** copre ~40 formati incluso FBX ma è pesante; **ufbx** è
+single-file e fa solo FBX, molto più leggero. **glTF 2.0** è lo standard aperto moderno
+(PBR e animazioni scheletriche nella spec) e si legge con `cgltf`. FBX resta necessario
+perché è ciò che esce dai DCC, ma è proprietario e ogni esportatore lo scrive a modo suo.
+
+### Fisica — Fase 3 (2D) e Fase 7 (3D) — **DECISA: Box2D v3 + Box3D**
+
+**2D: Box2D v3.** È la libreria "nuova, moderna ed efficiente": Erin Catto l'ha riscritta da
+zero in C con solver SIMD e sub-stepping. Matura e usata.
+
+**3D: Box3D.** Jolt Physics resta l'alternativa se Box3D si rivelasse impraticabile —
+multi-thread, deterministica, licenza ZLIB, provata in produzione su Horizon Forbidden West —
+ma la scelta è Box3D per coerenza con Box2D.
+
+> **DECISO il 2026-08-25: si usa Box3D, alpha compreso.** Erin Catto l'ha rilasciato il
+> 30 giugno 2026 con la stessa filosofia di Box2D — C17, solver SIMD, sub-stepping,
+> determinismo cross platform, mondi grandi con posizioni in double. La coerenza vale il
+> rischio: **stessa mano, stesso stile di API per il 2D e per il 3D**, invece di due
+> librerie che ragionano in modi diversi dentro lo stesso engine.
+>
+> **Cosa comporta usare software alpha, scritto qui perché non venga scoperto debuggando:**
+> 1. **Il commit va pinnato**, come ImGui — e qui conta di più: un'API instabile su un branch
+>    mobile fa smettere di compilare il progetto senza che tu abbia toccato niente.
+> 2. **"È un bug della libreria" diventa un'ipotesi legittima** quando qualcosa non torna, e
+>    va tenuta nella lista delle cause possibili invece che esclusa a priori. Con una libreria
+>    matura sarebbe l'ultima ipotesi; qui non lo è.
+> 3. **La documentazione è incompleta**: si leggeranno i sorgenti e i test. Per un progetto
+>    didattico è un vantaggio, non un costo.
+> 4. Un autore attivo su un progetto giovane **corregge i bug segnalati bene**.
+>
+> L'autore stesso avverte: *"I still consider Box3D to be alpha software"*, *"the engine
+> needs more testing and more complete documentation"*. Decisione presa consapevolmente.
+
+### Gamepad — dopo la Fase 1
+
+**Nessuna libreria nuova: GLFW ce l'ha già.** Dalla 3.3 espone un'API gamepad
+(`glfwGetGamepadState`, `glfwJoystickPresent`, `glfwSetJoystickCallback`) che normalizza i
+controller in un layout stile Xbox usando il database di mappature di SDL, incluso in GLFW.
+
+> **I gamepad si pollano, non generano eventi.** `glfwSetJoystickCallback` avvisa solo di
+> connessione e disconnessione; bottoni e assi vanno chiesti ogni frame. Non è un limite di
+> GLFW, è come funzionano i gamepad a livello di sistema.
+
+Forma naturale, coerente con quella già in uso per tastiera e mouse:
+
+- **Connessione/disconnessione → eventi** (`GamepadConnectedEvent`,
+  `GamepadDisconnectedEvent`): serve per "Controller 2 connesso" e per mettere in pausa
+  quando si scollega.
+- **Bottoni e assi → polling in `Input`.** Per gli assi analogici è l'unica forma sensata:
+  interessa *quanto* è inclinata la levetta adesso, non che è cambiata.
+- **Eventi di pressione/rilascio dei bottoni → sintetizzati** confrontando lo stato del
+  frame con quello precedente. Servono ai menu, non al gioco: si aggiungono quando ci sarà
+  un menu.
+
+**Trappola:** un controller assente dal database non viene riconosciuto come gamepad e
+`glfwGetGamepadState` fallisce. Cura: caricare un `gamecontrollerdb.txt` aggiornato con
+`glfwUpdateGamepadMappings`. **È un file di dati, non codice** — quindi allineato a D13:
+supportare un controller nuovo non deve richiedere una ricompilazione.
+
+### Localizzazione — Fase 4/5
+
+Soluzione **minimale**: file chiave→valore, uno per lingua, caricati a runtime.
+Scartate: **gettext** (ottimo tooling con Poedit, ma la libreria C è legata al locale di
+sistema e su Windows è scomoda); **ICU** (completo, decine di MB); **Fluent** di Mozilla
+(moderno e gestisce plurali e genere, ma le implementazioni C++ sono immature).
+
+Tre regole che separano una localizzazione che regge da una da rifare:
+
+1. **Chiavi simboliche, mai il testo inglese.** `ui.menu.play`, non `"Play"`. Usare
+   l'inglese come chiave sembra comodo finché non correggi un refuso nell'originale e
+   invalidi ogni traduzione esistente.
+2. **Interpolazione con indici posizionali:** `"{0} ha sconfitto {1}"`, non `"{} ha
+   sconfitto {}"` — in altre lingue l'ordine si inverte e il traduttore deve poterli
+   spostare. **`std::format` supporta già gli indici posizionali**, non serve altro.
+3. **Chiave mancante = rumore.** Mostrare `##ui.menu.play##`, non una stringa vuota. È la
+   regola dei default silenziosi applicata al testo: una stringa vuota in una UI sembra un
+   problema di layout e fa cercare nel posto sbagliato.
+
+**Formato consigliato: CSV.** Sembra povero rispetto a JSON o YAML, ed è esattamente il
+punto: **un CSV si apre in Excel, Google Sheets o LibreOffice**, con una colonna per lingua.
+Il giorno che chiedi a qualcuno di tradurre il gioco, gli mandi un foglio invece di
+insegnargli una sintassi. Si parsa in cinquanta righe.
+
+**Plurali — il pezzo che una tabella chiave→valore non copre.** "1 nemico" / "2 nemici" ha
+regole diverse per lingua: l'inglese e l'italiano hanno due forme, il russo tre, l'arabo sei.
+La via minimale è una chiave per forma (`enemy.count.one`, `enemy.count.other`) con una
+funzione per lingua che sceglie la forma dal numero — le regole stanno nei dati CPLDR, non
+nel codice. Da fare quando servirà una lingua slava, non prima: ma **la firma della funzione
+di traduzione deve prevedere il conteggio fin dall'inizio**, altrimenti va cambiata ovunque.
+
+> **Il costo vero della localizzazione non è il testo: sono i font.** Cirillico, greco e CJK
+> richiedono glyph range e atlas diversi in ImGui, e il cinese da solo sono migliaia di
+> glifi. E il tedesco è mediamente il 30% più lungo dell'inglese: ogni pannello che oggi va
+> giusto giusto domani trabocca. **Va progettato quando si costruisce il rendering del
+> testo, non aggiustato dopo.**
+
+### Networking — Fase 6/7, con un avvertimento anticipato
+
+**ENet** per il trasporto: UDP affidabile, piccolo, collaudato. Alternativa più moderna:
+**GameNetworkingSockets** di Valve (crittografia inclusa, più pesante).
+
+> **Il trasporto è la parte facile, e va detto prima e non dopo.** La replica di stato non è
+> una libreria: è un design fatto di autorità, interpolazione, riconciliazione e predizione
+> lato client. E soprattutto **impone vincoli sull'architettura della scena** — separazione
+> netta fra simulazione e presentazione, aggiornamenti deterministici, stato serializzabile.
+>
+> **CONFERMATO il 2026-08-25: l'ECS della Fase 3 va progettato senza chiudersi le porte
+> al networking.** Non si implementa la rete, ma le tre proprietà che la rendono possibile
+> vanno rispettate fin dall'inizio, perché aggiungerle dopo significa riscrivere la scena:
+> - **separazione netta fra simulazione e presentazione** — lo stato che conta deve poter
+>   avanzare senza che nulla venga disegnato;
+> - **aggiornamenti deterministici** — stesso stato più stesso input dà stesso risultato,
+>   quindi niente dipendenze da frame time variabile nella simulazione;
+> - **stato serializzabile** — ogni componente deve poter essere scritto e riletto.
+>
+> Sono tre proprietà che rendono l'ECS migliore comunque, anche se la rete non arrivasse
+> mai: sono le stesse che servono al salvataggio, al replay e ai test deterministici.
+>
+> Onestamente: è la voce con il rapporto sforzo/risultato peggiore dell'elenco. Vale la pena
+> solo se è un obiettivo vero, non un "sarebbe bello".
+
+### Moduli e plugin — molto più avanti
+
+Vanno distinte due cose che si chiamano quasi allo stesso modo:
+
+- **Modularità interna** (adesso, gratis): confini netti, target separati, D11 e D12. È ciò
+  che permette di aggiungere un sottosistema senza rompere gli altri.
+- **Plugin caricati dinamicamente** (DLL/`.so`, molto dopo): impongono un'**ABI stabile**, e
+  in C++ passare oggetti attraverso il confine di una DLL è un campo minato — allocatori
+  diversi ai due lati, RTTI che non si riconosce, eccezioni che non attraversano. Su un
+  engine che cambia forma ogni settimana, un'ABI stabile blocca proprio dove serve libertà.
+
+**Il modo migliore di prepararsi ai moduli è tenere puliti i confini interni**, non
+predisporre un sistema di plugin che poi vincola.
 
 ## Stato all'inizio della Fase 0
 

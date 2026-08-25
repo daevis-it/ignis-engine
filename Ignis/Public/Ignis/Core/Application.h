@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Ignis/Core/LayerStack.h"
 #include "Ignis/Core/Window.h"
 #include "Ignis/ImGui/ImGuiLayer.h"
 #include "Ignis/Events/ApplicationEvent.h"
@@ -19,6 +20,10 @@ namespace Ignis {
         void Run();
         void OnEvent(Event& e);
 
+        // Lo stack possiede il layer; il puntatore restituito è un osservatore.
+        Layer* PushLayer(std::unique_ptr<Layer> layer);
+        Layer* PushOverlay(std::unique_ptr<Layer> overlay);
+
         Window& GetWindow() { return *m_Window; }
         static Application& Get() { return *s_Instance; }
 
@@ -34,6 +39,13 @@ namespace Ignis {
         // NON riordinare: il compilatore non protesterebbe, il bug tornerebbe.
         std::unique_ptr<GLFWContext> m_GLFWContext;
         std::unique_ptr<Window>      m_Window;
+
+        // DOPO m_Window, e per lo stesso motivo per cui m_GLFWContext sta prima:
+        // i layer possiederanno risorse GPU (shader, texture, framebuffer) e devono
+        // morire MENTRE il contesto OpenGL è ancora vivo. Distruggendosi per primo,
+        // lo stack rilascia tutto prima che la finestra — e con lei il contesto —
+        // se ne vada. Invertirli darebbe glDelete* su un contesto morto, in silenzio.
+        LayerStack m_LayerStack;
 
         ImGuiLayer m_ImGuiLayer;
         bool m_Running = true;

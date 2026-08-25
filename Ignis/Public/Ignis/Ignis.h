@@ -10,6 +10,8 @@
 #include "Ignis/Core/Logger.h"
 #include "Ignis/Core/Application.h"
 #include "Ignis/Core/Input.h"
+#include "Ignis/Core/Layer.h"
+#include "Ignis/Core/LayerStack.h"
 #include "Ignis/Core/KeyCodes.h"
 #include "Ignis/Core/MouseCodes.h"
 #include "Ignis/Core/Window.h"

@@ -37,6 +37,16 @@ valle: una base propria per piccoli giochi indie e per insegnare game dev.
 - **Licenza** — nessuna per ora. Conseguenza: il repo è pubblico ma legalmente "tutti i
   diritti riservati", quindi nessuno può riusare il codice né contribuire. Da decidere
   prima di dare visibilità al progetto. Candidate: MIT, Apache 2.0, GPL v3.
+- **Il linguaggio di Vesta** — l'obiettivo dichiarato è un linguaggio "fra il C++ e la
+  comodità del C#", orizzontale sulle logiche di Ignis, nello spirito di GDScript per
+  Godot. Le strade: linguaggio proprio da zero (lexer, parser, VM — massimo apprendimento,
+  costo paragonabile a quello dell'engine stesso), oppure adottarne uno esistente
+  (**AngelScript** ha sintassi quasi identica a C#/C++ ed è nato per i game engine; **Lua**
+  è lo standard di fatto; **Wren** è piccolo e leggibile). **La decisione non va presa
+  ora**: il Vesta Header Tool serve identico in tutti i casi, quindi si può costruire il
+  prerequisito senza scegliere. Riprendere quando la Fase 3 avrà prodotto componenti veri
+  da esporre.
+
 - **Generator CMake su Windows** — da verificare con `cmake --help` sulla macchina reale.
   Raccomandazione: **Ninja + `cl.exe`** invece del generator Visual Studio, perché è
   indipendente dalla versione dell'IDE e sensibilmente più veloce. Visual Studio si apre
@@ -81,9 +91,22 @@ Virtual File System, asset handle, il concetto di "progetto utente" separato dal
 accettare un percorso di progetto dagli argomenti (`IgnisEditor /percorso/progetto`). Se
 l'avvio resta hardcodato, il giorno del Launcher va riscritto il boot del motore.
 
-### Fase 6 — vii (Visual Ignis Instructions)
-Ignis Header Tool, reflection, node editor. Realistica **solo dopo la Fase 3**: la
-reflection senza componenti da riflettere non ha oggetto.
+### Fase 6 — Vesta
+*(già "vii" — rinominata il 2026-08-25. Le "vesta" erano i fiammiferi di cera vittoriani,
+chiamati così dalla dea romana custode del fuoco: il nome tiene insieme il fiammifero e
+la fiamma di Ignis.)*
+
+Il livello di scripting e reflection dell'engine. Tre mattoni, in quest'ordine:
+
+1. **Vesta Header Tool** — il parser pre-compilazione che legge i decoratori nei nostri
+   header e genera il codice di reflection. **È il prerequisito di tutto il resto, e
+   soprattutto è indipendente da quale linguaggio di scripting sceglieremo:** serve
+   identico che si adotti Lua, AngelScript, o un linguaggio nostro.
+2. **Il binding runtime** — esporre le classi C++ riflesse a chi le vuole chiamare.
+3. **Il linguaggio** — vedi *decisioni rimandate*.
+
+Realistica **solo dopo la Fase 3**: la reflection senza componenti da riflettere non ha
+oggetto, e un linguaggio senza un'API da esporre non ha di che parlare.
 
 ### Fase 7 — 3D
 Mesh, materiali, luci, camera prospettica.
@@ -136,8 +159,8 @@ il boilerplate ripetuto, `#include <ostream>` mancante.
 **Verifica:** non-regressione dichiarata in anticipo — non deve cambiare niente di visibile.
 
 **`07` — README come memoria di lavoro**
-Stato per task, decisioni datate, note aperte, trappole pagate. "vii" spostato da
-architettura a visione futura, perché nel codice non esiste ancora una riga.
+Stato per task, decisioni datate, note aperte, trappole pagate. "Vesta" (ex "vii") spostata
+da architettura a visione futura, perché nel codice non esiste ancora una riga.
 **Verifica:** rileggerlo fingendo di non ricordare nulla del progetto e capire dove si è.
 
 ### Fase 1

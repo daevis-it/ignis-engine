@@ -24,7 +24,10 @@ namespace Ignis
         // Inizializziamo i backend usando la finestra di Ignis Engine
         GLFWwindow* window = Application::Get().GetWindow().GetNativeWindow();
         ImGui_ImplGlfw_InitForOpenGL(window, true);
-        ImGui_ImplOpenGL3_Init("#version 330");
+        // Deve corrispondere al contesto richiesto in Window.cpp (4.5 Core -> GLSL 450).
+        // Un mismatch qui non dà un errore chiaro: ImGui semplicemente non disegna,
+        // oppure i suoi shader falliscono la compilazione in silenzio.
+        ImGui_ImplOpenGL3_Init("#version 450");
     }
 
     void ImGuiLayer::Begin() {

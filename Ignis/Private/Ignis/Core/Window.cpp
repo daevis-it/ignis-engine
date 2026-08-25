@@ -25,8 +25,16 @@ namespace Ignis
         m_Data.Height = height;
         m_Data.Title = title;
 
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        // OpenGL 4.5 Core: è la versione minima che ha Direct State Access COMPLETO.
+        // DSA elimina il modello "lega l'oggetto a uno slot globale per poterlo
+        // modificare": si scrive glNamedBufferData(id, ...) invece di glBindBuffer +
+        // glBufferData. Meno stato globale, meno bug da stato sporco, e un modello
+        // concettualmente più vicino a Vulkan/DX12.
+        //
+        // Se glfwCreateWindow fallisce su una macchina, il driver non arriva a 4.5:
+        // l'errore è esplicito, non un contesto più vecchio restituito di nascosto.
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
         m_Window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
@@ -58,6 +66,11 @@ namespace Ignis
         // Quale driver ci ha risposto davvero. Non è decorazione: il giorno che
         // qualcosa renderizza diverso fra portatile e workstation, questa è la
         // prima riga che si guarda.
+        //
+        // GLVersion è popolata da GLAD e dice quale versione ha effettivamente
+        // caricato: è un dato diverso da GL_VERSION, che è quello che dichiara il
+        // driver. Se divergessero, sapresti subito da che parte cercare.
+        IGNIS_CORE_INFO("GLAD ha caricato OpenGL {}.{}", GLVersion.major, GLVersion.minor);
         IGNIS_CORE_INFO("OpenGL   Vendor: {}", GLStringOrUnknown(GL_VENDOR));
         IGNIS_CORE_INFO("       Renderer: {}", GLStringOrUnknown(GL_RENDERER));
         IGNIS_CORE_INFO("        Versione: {}", GLStringOrUnknown(GL_VERSION));

@@ -394,6 +394,15 @@ serva davvero.
 precompilata non servivano, perché qualcun altro aveva già compilato. L'errore è esplicito
 (`RandR headers not found`), ma arriva a metà configure.
 
+**La versione OpenGL riportata differisce fra le due macchine, ed è normale.** Chiediamo
+un contesto 3.3 Core nei window hints; NVIDIA lo onora alla lettera e riporta `3.3.0`,
+Mesa restituisce invece il massimo compatibile all'indietro (`4.6 Core Profile`). Quindi
+**il portatile riporta una versione più alta della workstation con la RTX.** Il rischio
+sarebbe scrivere codice che usa una funzione 4.x, vederlo funzionare su Linux e non
+compilare su Windows: in pratica GLAD lo impedisce, perché è generato per 3.3 e i simboli
+più recenti non esistono affatto. Da ricordare il giorno che si rigenera GLAD per una
+versione diversa.
+
 **I colori ANSI su Windows vanno chiesti.** Il terminale Windows moderno capisce le
 sequenze ANSI, ma solo dopo una `SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)`
 sull'handle giusto — `STD_ERROR_HANDLE`, dato che scriviamo su `cerr`. Senza, al posto dei

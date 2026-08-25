@@ -31,7 +31,4 @@ private:
     float m_AccumuloSec   = 0.0f;
     int   m_FrameNelSec   = 0;
     float m_SommaMsNelSec = 0.0f;
-
-    // per provare il tetto al delta time
-    bool  m_StalloRichiesto = false;
 };

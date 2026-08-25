@@ -4,36 +4,62 @@
 #include "Ignis/Core/Input.h"
 #include "Ignis/Core/Logger.h"
 
+#include <format>
+#include <stdexcept>
+
 // Window.h non li espone più: chi usa OpenGL se lo include da sé. Queste due
 // chiamate GL sono provvisorie e migreranno nel Renderer alla Fase 2.
 #include <glad/glad.h>
 
-#include <imgui.h>
+#include <filesystem>
+#include <utility>
 
 namespace Ignis {
 
     Application* Application::s_Instance = nullptr;
 
-    Application::Application() {
+    Application::Application(ApplicationSpecification specification)
+        : m_Specification(std::move(specification))
+    {
         s_Instance = this;
+
+        // Prima di tutto il resto: se il client ha chiesto una directory di lavoro,
+        // ci si sposta ORA, altrimenti ogni percorso relativo usato dopo (asset,
+        // configurazioni) verrebbe risolto rispetto alla cartella sbagliata.
+        if (!m_Specification.WorkingDirectory.empty())
+        {
+            std::error_code ec;
+            std::filesystem::current_path(m_Specification.WorkingDirectory, ec);
+            if (ec)
+            {
+                // Non è un assert: una cartella che non esiste è una condizione del
+                // mondo reale, e deve fermare l'avvio anche in Release.
+                throw std::runtime_error(std::format(
+                    "Impossibile spostarsi nella directory di lavoro \"{}\": {}",
+                    m_Specification.WorkingDirectory, ec.message()));
+            }
+            IGNIS_CORE_INFO("Directory di lavoro: {}", std::filesystem::current_path().string());
+        }
 
         // Se GLFW non parte, il costruttore di GLFWContext lancia e l'avvio si
         // ferma qui: non c'è nessun percorso in cui si prosegue con una GLFW morta.
         m_GLFWContext = std::make_unique<GLFWContext>();
 
-        m_Window = std::make_unique<Window>(WindowProps{
-            .Title  = "Ignis Engine",
-            .Width  = 1280,
-            .Height = 720,
-            .VSync  = true
-        });
+        m_Window = std::make_unique<Window>(m_Specification.Window);
         m_Window->SetEventCallback([this](Event& e) { this->OnEvent(e); });
 
-        // L'ImGuiLayer entra come overlay: essendo in cima, riceverà gli eventi per
-        // primo e potrà consumarli quando riguardano l'interfaccia.
-        auto imguiLayer = std::make_unique<ImGuiLayer>();
-        m_ImGuiLayer = imguiLayer.get();
-        PushOverlay(std::move(imguiLayer));
+        if (m_Specification.EnableImGui)
+        {
+            // Overlay: essendo in cima allo stack riceve gli eventi per primo e può
+            // consumarli quando riguardano l'interfaccia.
+            auto imguiLayer = std::make_unique<ImGuiLayer>();
+            m_ImGuiLayer = imguiLayer.get();
+            PushOverlay(std::move(imguiLayer));
+        }
+        else
+        {
+            IGNIS_CORE_INFO("ImGui disattivato dalla ApplicationSpecification.");
+        }
     }
 
     Application::~Application() {
@@ -112,9 +138,6 @@ namespace Ignis {
 
             const Timestep timestep(deltaSeconds);
 
-            if (Input::IsKeyPressed(KeyCode::Escape))
-                m_Running = false;
-
             glClear(GL_COLOR_BUFFER_BIT);
 
             // Avanti: dal basso verso l'alto. Il gioco si aggiorna prima della UI
@@ -122,15 +145,19 @@ namespace Ignis {
             for (auto& layer : m_LayerStack)
                 layer->OnUpdate(timestep);
 
-            m_ImGuiLayer->Begin();
+            // Il dockspace NON è più qui: era l'engine che imponeva a ogni client una
+            // superficie di docking a tutto schermo. È una scelta dell'editor, e vive
+            // nell'EditorLayer. Con quella riga se n'è andato anche <imgui.h> da
+            // questo file.
+            if (m_ImGuiLayer)
+            {
+                m_ImGuiLayer->Begin();
 
-            // Il dockspace PRIMA dei pannelli dei layer, così possono agganciarcisi.
-            ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+                for (auto& layer : m_LayerStack)
+                    layer->OnImGuiRender();
 
-            for (auto& layer : m_LayerStack)
-                layer->OnImGuiRender();
-
-            m_ImGuiLayer->End();
+                m_ImGuiLayer->End();
+            }
 
             m_Window->Update();
         }

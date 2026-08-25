@@ -4,7 +4,7 @@ Game engine 2D/3D scritto da zero in C++20, con Editor visivo integrato.
 Progetto personale a scopo di apprendimento: capire il **perché** dei motori moderni
 costruendone uno, non replicarne le feature.
 
-> **Stato attuale — FASE 0 CHIUSA (task `01`–`05c`). Prossima: Fase 1.**
+> **Stato attuale — ITERAZIONE #1 CHIUSA. Fasi 0 e 1 complete (task `01`–`11`).**
 > Il progetto è stato ristrutturato da eseguibile monolitico a **tre target**
 > (`Ignis` libreria + `IgnisEditor` + `Sandbox`), con separazione **Public/Private** degli
 > header e dipendenze via **FetchContent**.
@@ -155,6 +155,128 @@ all'`Application` tramite `EventCallback`.
 > funzioni C: non possono catturare stato. Il puntatore utente è il canale che GLFW offre
 > per riattaccare l'oggetto C++ alla finestra che ha generato l'evento — ed è ciò che
 > permetterà di avere più finestre senza riscrivere niente.
+
+### LayerStack
+
+Un livello dell'applicazione (`Layer`) può agganciarsi, aggiornarsi, disegnare interfaccia
+e ricevere eventi. L'editor è un layer, un gioco è un layer, l'interfaccia è un *overlay*.
+
+| | direzione | perché |
+|---|---|---|
+| **Update** | dal basso verso l'alto | il gioco si aggiorna prima della UI che lo mostra |
+| **Render** | dal basso verso l'alto | il fondo si disegna prima di ciò che ci sta sopra |
+| **Eventi** | **dall'alto verso il basso** | chi sta sopra vede il clic per primo |
+
+> **L'ordine degli eventi è l'inverso di quello visivo, e non è arbitrario: è l'unica regola
+> che rende sensata un'interfaccia.** Se clicchi su un pannello che copre il gioco deve
+> rispondere il pannello — cioè la cosa che *vedi*, che è quella disegnata per ultima.
+> Propagando a ritroso, il primo a ricevere è l'ultimo ad aver disegnato.
+
+Il ciclo si interrompe appena un layer mette `Handled = true`. Gli **overlay** stanno sempre
+in cima anche se inseriti prima, così un layer di gioco aggiunto dopo non finisce mai sopra
+l'interfaccia.
+
+> **`PopLayer` e `PopOverlay` sono due funzioni distinte di proposito.** Ognuna cerca solo
+> nella propria zona: se cercassero ovunque, rimuovere un overlay con `PopLayer`
+> decrementerebbe il confine interno e **ogni inserimento successivo finirebbe nel posto
+> sbagliato** — un layer di gioco sopra l'interfaccia, con la causa a ore di distanza dal
+> sintomo.
+
+`LayerStack` è dichiarato in `Application` **dopo** `m_Window`: i layer possiederanno
+risorse GPU e devono morire mentre il contesto OpenGL è ancora vivo. Stessa regola d'ordine
+del ciclo di vita GLFW, applicata a un caso nuovo.
+
+### Cattura dell'input
+
+`ImGuiLayer` è un overlay, quindi riceve gli eventi per primo, e li consuma quando ImGui li
+vuole:
+
+```cpp
+if (event.IsInCategory(EventCategory::Mouse) && io.WantCaptureMouse)    event.Handled = true;
+if (event.IsInCategory(EventCategory::Keyboard) && io.WantCaptureKeyboard) event.Handled = true;
+```
+
+Tastiera e mouse si consumano **indipendentemente**: il puntatore sopra un pannello non
+deve rubare i tasti al gioco, e un campo di testo attivo non deve bloccare il clic sul mondo.
+
+> **Qui non stiamo passando l'input a ImGui: glielo stiamo CHIEDENDO.** ImGui riceve gli
+> eventi dalle proprie callback GLFW, installate a catena sopra le nostre. Noi gli chiediamo
+> soltanto se quello che è appena successo riguardava lui.
+>
+> `WantCaptureMouse`/`WantCaptureKeyboard` sono calcolati durante `ImGui::NewFrame()`,
+> quindi il valore letto è quello del **frame precedente**. È il comportamento normale e un
+> frame di latenza è impercettibile — ma se un clic sembrasse "passare attraverso" nel primo
+> frame in cui apri un pannello, la causa è questa.
+
+`SetBlockEvents(false)` disattiva il filtro: servirà alla Fase 4, quando il viewport di
+gioco dell'editor vorrà l'input anche col puntatore sopra l'area di ImGui.
+
+### Timestep
+
+```cpp
+void OnUpdate(Timestep ts) override {
+    m_Posizione += m_Velocita * ts;              // conversione implicita a float
+    IGNIS_INFO("{:.2f} ms", ts.GetMilliseconds());
+}
+```
+
+Esiste come **tipo** e non come `float` nudo perché rende esplicita l'unità: *"questo float è
+in secondi o millisecondi?"* è la domanda dietro metà dei bug di movimento mille volte troppo
+veloce. La conversione è implicita solo verso `float`; il costruttore è `explicit`, quindi un
+float non diventa un Timestep per sbaglio.
+
+Il tempo viene da **`std::chrono::steady_clock`**, non da `glfwGetTime` né da `system_clock`:
+
+> `system_clock` può **saltare all'indietro** per una sincronizzazione NTP o un cambio d'ora,
+> e un delta time negativo fa cose molto strane in una simulazione. `steady_clock` è monotono
+> per contratto, e non lega il timing a GLFW — utile il giorno che servisse far girare
+> l'engine headless per dei test.
+
+**Il delta è limitato a 0,1 s.** Con un breakpoint di trenta secondi, il frame successivo
+avrebbe `ts = 30.0` e qualunque cosa si muova attraverserebbe la mappa. Verificato
+sospendendo il processo con `SIGSTOP`:
+
+```
+Delta time troncato: 1.509s -> 0.100s (stallo o breakpoint?)
+```
+
+Non è un default silenzioso: quando scatta, si vede.
+
+### ApplicationSpecification
+
+```cpp
+Ignis::Application* Ignis::CreateApplication(ApplicationCommandLineArgs args) {
+    ApplicationSpecification spec;
+    spec.Name          = "Sandbox";
+    spec.Window.Title  = "Sandbox — un gioco su Ignis";
+    spec.EnableImGui   = false;      // un gioco non paga ImGui
+    spec.CommandLineArgs = args;
+    return new SandboxApplication(spec);
+}
+```
+
+**`EnableImGui`** decide se l'`ImGuiLayer` viene creato. Con `false` non c'è contesto, non
+c'è atlas dei font sulla GPU, non c'è `NewFrame`/`Render` a vuoto ogni frame. *Toglie il
+costo a runtime, non i simboli dal binario* — per quello servirebbe separare ImGui a livello
+di build, ed è annotato per la Fase 5.
+
+**`WorkingDirectory`**, se valorizzata, sposta la directory di lavoro all'avvio — prima di
+ogni altra cosa, perché altrimenti ogni percorso relativo verrebbe risolto rispetto alla
+cartella sbagliata. Una cartella inesistente **ferma l'avvio anche in Release**: non è un
+assert, è una condizione del mondo reale.
+
+**`CommandLineArgs`** è la giuntura per il Launcher della Fase 5, che avvierà l'editor come
+`IgnisEditor /percorso/progetto`. Oggi l'editor logga l'argomento e non ci fa niente:
+impalcatura, non arredo.
+
+> **Tre cose sono uscite dall'engine con questo task, e non è pulizia estetica.**
+> Il **dockspace** era imposto da `Application` a ogni client: una superficie di docking a
+> tutto schermo è una scelta dell'editor, non del motore — ora vive nell'`EditorLayer`, e con
+> lui se n'è andato `<imgui.h>` da `Application.cpp`.
+> **ESC** era cablato nel game loop: nessun gioco vero si chiude con ESC. Ora c'è
+> `Application::Close()` e la decisione è del client — **ed essendo diventato un evento
+> invece che polling, passa dall'ImGuiLayer: scrivendo in un campo di testo ESC non chiude
+> più l'applicazione.** Prima lo faceva.
 
 ### Ciclo di vita di GLFW
 
@@ -423,50 +545,41 @@ delimitano il frame UI dentro il game loop.
 
 ## Cosa non funziona ancora
 
-Elenco onesto di ciò che è rotto o assente. Ogni voce rimanda al task che la chiude
-(dettaglio in [`ROADMAP.md`](ROADMAP.md)).
+**I bug e i default silenziosi della revisione iniziale sono tutti chiusi.** Quel che resta
+è assenza, non rottura — e va detto con precisione:
 
-### Bug aperti
+### Non c'è un renderer
 
-**Il resize non aggiorna il viewport OpenGL** → task `05`
-`glViewport` non compare in nessun punto del progetto. Non si nota oggi perché si disegna
-solo un `glClear` e ImGui gestisce il proprio viewport, ma al primo triangolo esce fuori.
-In più si usa `glfwSetWindowSizeCallback`, che dà *screen coordinates*: per `glViewport`
-serve `glfwSetFramebufferSizeCallback`, e su schermi HiDPI i due numeri differiscono.
+L'engine apre una finestra, la pulisce con `glClearColor` e disegna ImGui. **Non sa
+disegnare niente di suo**: nessun `Shader`, nessun `Buffer`, nessuna `Texture`. È la Fase 2,
+ed è il contenuto dell'iterazione #2.
 
-### Default silenziosi
+### Debiti noti, con la loro condizione
 
-### Buchi architetturali
+**`Input` è legato alla finestra principale.** `Input::IsKeyPressed` interroga sempre
+`Application::Get().GetWindow()`. Con una finestra sola è corretto; con più finestre il
+polling non vedrebbe i tasti di quella che ha davvero il focus. **Va risolto prima di
+riattivare i viewport ImGui (D14), non dopo.**
 
-- **Nessun LayerStack** → task `08`. `ImGuiLayer` è un membro concreto di `Application`;
-  `OnEvent` intercetta `WindowClose` e finisce lì. Il flag `Handled` non lo legge nessuno.
-- **`io.WantCaptureKeyboard` / `WantCaptureMouse` mai consultati** → task `09`.
-  Conseguenza pratica: scrivendo in un campo di testo di ImGui, il gioco riceve gli stessi
-  tasti. E `Input::IsKeyPressed(GLFW_KEY_ESCAPE)` nel loop polla GLFW ignorando ImGui.
-- **Nessun timestep, nessun VSync** → task `10`. Il loop gira libero bruciando CPU e GPU, e
-  non esiste un delta time da passare a nulla.
-- **Finestra hardcodata** a `800, 600, "Ignis Engine"` dentro il costruttore → task `11`.
+**Un gioco si porta ImGui nel binario anche spegnendolo.** `EnableImGui = false` toglie il
+costo a runtime — contesto, font, `NewFrame`/`Render` — ma i simboli restano linkati
+(~1000 in `Sandbox`). Per farli sparire davvero serve separare ImGui a livello di build,
+lavoro che ha senso quando ci sarà una pipeline di packaging vera (Fase 5).
 
-### Debiti minori
+**Le due chiamate GL in `Application.cpp`** (`glClearColor`, `glClear`, `glViewport`) sono
+provvisorie e violano D11: migreranno nel Renderer alla Fase 2. Sono annotate sul posto.
 
-- **`Window.h` espone `<glad/glad.h>` e `<GLFW/glfw3.h>`** → task `05`. Essendo un header
-  pubblico, ogni client che include Ignis si porta dentro tutto GLFW: l'engine non sta
-  nascondendo la sua libreria di finestre, la sta ridistribuendo. È il motivo per cui
-  oggi `target_link_libraries(Ignis PUBLIC …)` invece di `PRIVATE`.
-- **`EventType` dichiara sette valori che nessuno emette** → task `06`:
-  `WindowFocus`, `WindowLostFocus`, `WindowMoved`, `KeyTyped`, `AppTick`, `AppUpdate`,
-  `AppRender`. Un enum che promette cose inesistenti è documentazione falsa.
-- **`EventCategory` è un enum non-scoped** → task `06`: `Ignis::None` è un simbolo nudo nel
-  namespace, che prima o poi collide.
-- **`repeatCount` è hardcodato a 0 o 1** → task `05`, non conta le ripetizioni reali.
-- **`Event.h` usa `std::ostream` senza includere `<ostream>`** → task `06`. Compila per
-  inclusione transitiva, cioè per fortuna.
-- **Warning attivi in build.** `-Wall -Wextra` segnala parametri non usati in
-  `Window.cpp` (`scancode`, `mods`) e in `EntryPoint.h` (`argc`, `argv`). **Sono voluti e
-  restano visibili**: si azzerano ai task `05` e `11`, quando quei parametri cominceranno
-  a servire davvero. Silenziarli adesso vorrebbe dire nascondere un promemoria.
+### Impalcatura dichiarata, che aspetta il suo tetto
 
----
+- **`ApplicationSpecification::CommandLineArgs`** — l'editor logga l'argomento e non lo usa.
+  Aspetta il Launcher (Fase 5).
+- **`ImGuiLayer::SetBlockEvents`** — il meccanismo c'è, nessuno lo chiama. Aspetta il
+  viewport di gioco dell'editor (Fase 4).
+- **Il pannello "prova della cattura input"** nell'`EditorLayer` — è il banco di prova con
+  cui verifichiamo le funzionalità nuove finché l'editor non avrà pannelli veri.
+- **Il blocco `if (ViewportsEnable)` in `ImGuiLayer::End()`** — resta nel codice e non
+  scatta. È il codice che servirà intatto se i viewport torneranno: più onesto lasciarlo lì
+  che riscriverlo a memoria fra sei mesi.
 
 ## Trappole già pagate
 

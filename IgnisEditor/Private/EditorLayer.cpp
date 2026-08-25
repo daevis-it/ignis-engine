@@ -2,9 +2,6 @@
 
 #include <imgui.h>
 
-#include <chrono>
-#include <thread>
-
 void EditorLayer::OnAttach()
 {
     IGNIS_INFO("EditorLayer agganciato.");
@@ -22,24 +19,9 @@ void EditorLayer::OnUpdate(Ignis::Timestep ts)
     if (m_AccumuloSec >= 1.0f)
     {
         m_MediaMs = m_SommaMsNelSec / static_cast<float>(m_FrameNelSec);
-
-        // Temporaneo, per verificare il task 10 anche senza guardare il pannello:
-        // va tolto quando il Timestep sarà dato per assodato.
-        IGNIS_INFO("frame medio: {:.2f} ms  ({:.0f} FPS su {} frame)",
-                   m_MediaMs, 1000.0f / m_MediaMs, m_FrameNelSec);
-
         m_AccumuloSec   = 0.0f;
         m_FrameNelSec   = 0;
         m_SommaMsNelSec = 0.0f;
-    }
-
-    // Stallo simulato: serve a vedere il tetto al delta time entrare in funzione.
-    // Il frame DOPO questo deve arrivare troncato a 100 ms, non a ~1000.
-    if (m_StalloRichiesto)
-    {
-        m_StalloRichiesto = false;
-        IGNIS_WARN("Stallo simulato di 1 secondo: il prossimo delta dovrà essere troncato.");
-        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 }
 
@@ -59,10 +41,32 @@ void EditorLayer::OnEvent(Ignis::Event& event)
         ++m_ClicRicevuti;
         return false;
     });
+
+    // ESC chiude l'editor. È una decisione DEL CLIENT, non del motore: prima stava
+    // cablata nel game loop di Application, e nessun gioco vero si chiude con ESC.
+    //
+    // Ed è un EVENTO, non più polling: perciò passa dall'ImGuiLayer, che lo consuma
+    // quando ImGui vuole la tastiera. Risultato: scrivendo in un campo di testo,
+    // ESC non chiude più l'applicazione. Prima lo faceva, ed era sbagliato.
+    dispatcher.Dispatch<KeyPressedEvent>([](KeyPressedEvent& e) {
+        if (e.GetKeyCode() == static_cast<int>(KeyCode::Escape))
+        {
+            IGNIS_INFO("ESC premuto: chiusura richiesta dall'editor.");
+            Application::Get().Close();
+            return true;   // consumato
+        }
+        return false;
+    });
 }
 
 void EditorLayer::OnImGuiRender()
 {
+    // Il dockspace vive QUI e non nell'engine: una superficie di docking a tutto
+    // schermo è una scelta dell'editor. Un gioco con due pannelli di debug non la
+    // vuole, e il motore non deve imporgliela.
+    // Va creato PRIMA degli altri pannelli, così possono agganciarcisi.
+    ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+
     ImGuiIO& io = ImGui::GetIO();
 
     ImGui::Begin("Ignis — prova della cattura input");
@@ -100,11 +104,6 @@ void EditorLayer::OnImGuiRender()
                 m_MediaMs > 0.0f ? 1000.0f / m_MediaMs : 0.0f);
     ImGui::TextWrapped("Con il VSync attivo la media deve stare intorno a 16.6 ms su uno "
                        "schermo a 60 Hz. Senza, molto meno.");
-
-    if (ImGui::Button("Simula uno stallo di 1 secondo"))
-        m_StalloRichiesto = true;
-    ImGui::SameLine();
-    ImGui::TextDisabled("(il frame dopo va troncato a 100 ms)");
 
     ImGui::Separator();
     ImGui::Checkbox("Mostra la demo di ImGui", &m_MostraDemo);

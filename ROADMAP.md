@@ -1,6 +1,6 @@
 # Ignis Engine — Roadmap
 
-> Documento di lavoro. Aggiornato: 2026-08-24.
+> Documento di lavoro. Aggiornato: 2026-08-25 (fine iterazione #1).
 > **La verità sta nel codice.** Questo file è la mappa, non il territorio: quando una
 > decisione ci si appoggia, va verificata sui sorgenti.
 > Il `README.md` è la memoria operativa (stato per task, trappole pagate); questo file
@@ -77,12 +77,12 @@ Non aggiunge una singola feature. Salda i debiti finché il progetto è embriona
 costano poco: ristrutturazione dell'albero, build a tre target portabile, correzione dei
 bug di ciclo di vita, pulizia di Logger ed Event system, README riscritto.
 
-### Fase 1 — Il guscio dell'applicazione *(prossima)*
+### Fase 1 — Il guscio dell'applicazione — **CHIUSA il 2026-08-25**
 LayerStack, propagazione degli eventi a ritroso con `Handled`, ImGuiLayer come layer vero
 con cattura dell'input, Timestep nel game loop, `ApplicationSpecification` con argomenti
 da riga di comando. Da qui in poi ogni sistema nuovo ha un posto dove nascere.
 
-### Fase 2 — Renderer 2D
+### Fase 2 — Renderer 2D *(prossima: iterazione #2)*
 Astrazione di OpenGL **4.5 con DSA** a strati sottili: `Shader`, `VertexBuffer`/`IndexBuffer`,
 `BufferLayout`, `VertexArray`, `Texture2D`. Tutte RAII e **non copiabili** — copy
 `= delete`, move implementato: il doppio `glDelete*` su un ID condiviso è il bug classico
@@ -150,81 +150,40 @@ Mesh, materiali, luci, camera prospettica.
 
 ---
 
-## Task correnti — Fase 0 e Fase 1
+## Task — stato
 
-Ogni task chiude con una verifica che deve poter **fallire in un solo modo**.
+### Iterazione #1 — CHIUSA (2026-08-25)
 
-### Fase 0
+Tutti verificati su **entrambi** i bersagli, Linux/GCC e Windows/MSVC, da CLion.
 
-**`01` — Ristrutturazione albero e build a tre target**
-`01a` sposta i file nel nuovo albero (`Ignis/`, `IgnisEditor/`, `Sandbox/`, `vendor/glad/`).
-`01b` riscrive `CMakeLists.txt`: tre target, C++20, `cmake_minimum_required` a 3.20+,
-GLOB con `CONFIGURE_DEPENDS`.
-`01c` aggiunge FetchContent (GLFW, GLM, ImGui) e i `CMakePresets.json` per Linux-GCC e
-Windows-MSVC, con le flag `/utf-8` e `/Zc:__cplusplus` su MSVC.
-*`01a` da solo non compila: le tre sotto-milestone si committano insieme.*
-**Verifica:** `IgnisEditor` e `Sandbox` partono entrambi e aprono una finestra. Su
-Windows: clone pulito, configure, build, senza installare nulla a mano.
+| # | Task | Esito |
+|---|---|---|
+| `01` | Ristrutturazione albero e build a tre target | albero Public/Private, FetchContent, preset |
+| `02` | Logger | livelli, canali engine/client, colori, **formato verificato dal compilatore** |
+| `03` | PCH e Core defines | `IGNIS_ASSERT`/`IGNIS_VERIFY`, PCH (**−39%** sulla ricompilazione) |
+| `04` | Ciclo di vita GLFW | RAII, error callback, **ordine corretto per costruzione** |
+| `05a` | Migrazione a OpenGL 4.5 Core | GLAD rigenerato, DSA disponibile |
+| `05b` | Window | `WindowProps`, viewport che segue il resize, VSync, eventi completi |
+| `05c` | GLFW fuori dall'API pubblica | keycode dell'engine generati da GLFW, ~920 KB via dagli header |
+| `06` | Pulizia Event system | `enum class`, macro, tre `EventType` fantasma rimossi |
+| `07` | README come memoria di lavoro | aggiornato a ogni task, non solo alla fine |
+| `08` | LayerStack | propagazione a ritroso, `Handled` che finalmente serve |
+| `09` | ImGuiLayer come overlay | cattura input; **viewport disattivati** (D14) |
+| `10` | Timestep | `steady_clock`, tetto a 0,1 s verificato con `SIGSTOP` |
+| `11` | ApplicationSpecification | `EnableImGui`, `WorkingDirectory`, argomenti; ESC e dockspace al client |
 
-**`02` — Logger**
-Format string sempre letterale, livelli Trace/Info/Warn/Error, macro `IGNIS_*`, colori
-ANSI su terminale.
-**Verifica:** un evento il cui `ToString()` contiene una graffa viene stampato
-letteralmente invece di far lanciare `format_error` a `std::vformat`.
+**Due regressioni introdotte e corrette durante l'iterazione**, entrambe dallo stesso
+meccanismo — ricostruire un file da una copia vecchia:
 
-**`03` — PCH e Core defines**
-`ignispch.h`, `IGNIS_ASSERT` che passa dal Logger e rompe nel debugger (`__debugbreak()`
-su MSVC, `__builtin_trap()` su GCC), macro di piattaforma, tipi base.
-**Verifica:** un assert deliberatamente falso ferma il programma nel punto giusto su
-entrambi i sistemi. Annotare i tempi di build prima e dopo il PCH.
+1. `Application.h` da una copia pre-`05b` → **il compilatore l'ha preso subito**, danno zero.
+2. `Ignis/CMakeLists.txt` da una copia pre-`03` → persi `IGNIS_DEBUG` e il PCH. **Nessun
+   sintomo per tre task**: assert disattivati e log di traccia spariti, con la build verde.
+   Ora `Base.h` contiene un `#error` che rende impossibile ripetere l'omissione in silenzio,
+   e il configure dichiara il PCH.
 
-**`04` — Ciclo di vita GLFW**
-Init e terminate spostati fuori da `Application`, `glfwSetErrorCallback` installata,
-`gladLoadGLLoader` controllato, ordine di distruzione corretto.
-**Verifica:** l'errore GLFW oggi silenzioso alla chiusura diventa visibile, e poi sparisce
-quando l'ordine è corretto. Due osservazioni distinte, non una.
+### Iterazione #2 — da definire
 
-**`05` — Window**
-`WindowProps`, `glfwSetFramebufferSizeCallback` con `glViewport`, VSync attivabile, eventi
-mancanti (focus, moved, char), `repeatCount` che conta davvero.
-**Verifica:** con un `glClearColor` non nero, ridimensionare la finestra e vedere il
-colore riempire tutta l'area nuova.
-
-**`06` — Event system**
-`EventCategory` scoped, rimozione (o emissione) dei sette `EventType` mai usati, macro per
-il boilerplate ripetuto, `#include <ostream>` mancante.
-**Verifica:** non-regressione dichiarata in anticipo — non deve cambiare niente di visibile.
-
-**`07` — README come memoria di lavoro**
-Stato per task, decisioni datate, note aperte, trappole pagate. "Vesta" (ex "vii") spostata
-da architettura a visione futura, perché nel codice non esiste ancora una riga.
-**Verifica:** rileggerlo fingendo di non ricordare nulla del progetto e capire dove si è.
-
-### Fase 1
-
-**`08` — LayerStack**
-`Layer` con `OnAttach`/`OnDetach`/`OnUpdate`/`OnEvent`, stack con overlay separati,
-propagazione a ritroso che si ferma su `Handled`.
-**Verifica:** due layer con nomi distinti nel log, un evento che il primo consuma e che al
-secondo non arriva mai.
-
-**`09` — ImGuiLayer diventa un Layer**
-Smette di essere membro di `Application`, entra come overlay, consulta
-`WantCaptureKeyboard` / `WantCaptureMouse` per bloccare l'input al gioco.
-**Verifica:** scrivere in un `InputText` di ImGui mentre un layer di gioco logga i tasti —
-il gioco non deve vedere niente.
-
-**`10` — Timestep**
-`Timestep` nel loop, `OnUpdate(ts)` su tutti i layer, VSync attivo.
-**Verifica:** un layer che stampa il delta time. Con VSync circa 16.6 ms, senza molto
-meno: due numeri distinguibili, non "sembra fluido".
-
-**`11` — ApplicationSpecification**
-Nome, dimensioni, working directory e `CommandLineArgs` — la giuntura per il Launcher.
-**Verifica:** `IgnisEditor pippo.ignis` logga l'argomento ricevuto. Non fa nulla con quel
-percorso: è impalcatura, non arredo.
-
----
+Fase 2, il Renderer 2D. I task si numerano da `12`.
 
 ## Sistemi da integrare
 

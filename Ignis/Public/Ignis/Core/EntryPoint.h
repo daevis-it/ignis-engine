@@ -7,7 +7,7 @@
 #include <exception>
 #include <memory>
 
-extern Ignis::Application* Ignis::CreateApplication();
+extern Ignis::Application* Ignis::CreateApplication(Ignis::ApplicationCommandLineArgs args);
 
 int main(int argc, char** argv)
 {
@@ -25,7 +25,10 @@ int main(int argc, char** argv)
     {
         // unique_ptr e non 'delete app': se Run() lancia, il delete non verrebbe
         // mai eseguito e l'Application resterebbe in piedi fino a fine processo.
-        std::unique_ptr<Ignis::Application> app(Ignis::CreateApplication());
+        // argc/argv arrivano finalmente da qualche parte: erano i due warning
+        // "unused parameter" che tenevamo accesi apposta dal task 01.
+        std::unique_ptr<Ignis::Application> app(
+            Ignis::CreateApplication(Ignis::ApplicationCommandLineArgs{ argc, argv }));
         app->Run();
     }
     catch (const std::exception& e)

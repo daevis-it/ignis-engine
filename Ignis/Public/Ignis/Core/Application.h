@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Ignis/Core/Base.h"
 #include "Ignis/Core/LayerStack.h"
 #include "Ignis/Core/Timestep.h"
 #include "Ignis/Core/Window.h"
@@ -7,6 +8,7 @@
 #include "Ignis/Events/ApplicationEvent.h"
 #include <chrono>
 #include <memory>
+#include <string>
 
 namespace Ignis {
 
@@ -14,13 +16,58 @@ namespace Ignis {
     // dell'engine, non qualcosa che un client debba sapere.
     class GLFWContext;
 
+    // Gli argomenti della riga di comando, passati dall'engine al client.
+    // Oggi nessuno li usa davvero: sono la GIUNTURA per il Launcher della Fase 5,
+    // che avvierà l'editor come `IgnisEditor /percorso/progetto`. Metterla adesso
+    // costa niente; aggiungerla dopo vorrebbe dire riscrivere l'avvio del motore.
+    struct ApplicationCommandLineArgs
+    {
+        int    Count = 0;
+        char** Args  = nullptr;
+
+        const char* operator[](int index) const
+        {
+            IGNIS_CORE_ASSERT(index >= 0 && index < Count,
+                              "Indice {} fuori dai {} argomenti disponibili", index, Count);
+            return Args[index];
+        }
+    };
+
+    struct ApplicationSpecification
+    {
+        std::string Name = "Ignis Application";
+
+        // Titolo, dimensioni e VSync della finestra.
+        WindowProps Window{};
+
+        // false = l'ImGuiLayer non viene nemmeno creato. Un gioco non paga contesto,
+        // atlas dei font e un NewFrame/Render a vuoto per ogni frame.
+        // NOTA: toglie il costo a RUNTIME, non i simboli dal binario — per quello
+        // servirebbe separare ImGui a livello di build (vedi ROADMAP, Fase 5).
+        bool EnableImGui = true;
+
+        // Se non vuota, l'engine ci si sposta all'avvio. È l'altra metà della
+        // giuntura per il Launcher: aprire un progetto significa lavorare dentro
+        // la sua cartella.
+        std::string WorkingDirectory;
+
+        ApplicationCommandLineArgs CommandLineArgs;
+    };
+
     class Application {
     public:
-        Application();
+        explicit Application(ApplicationSpecification specification = {});
         virtual ~Application();
 
         void Run();
         void OnEvent(Event& e);
+
+        // Chiude ordinatamente l'applicazione. QUANDO chiuderla è una decisione del
+        // client: nessun gioco vero si chiude con ESC, quindi quella scelta non può
+        // stare cablata nel game loop del motore.
+        void Close() { m_Running = false; }
+
+        const ApplicationSpecification& GetSpecification() const { return m_Specification; }
 
         // Lo stack possiede il layer; il puntatore restituito è un osservatore.
         Layer* PushLayer(std::unique_ptr<Layer> layer);
@@ -39,6 +86,8 @@ namespace Ignis {
         // Prima glfwTerminate() stava nel corpo di ~Application e girava PRIMA di
         // ~Window, cioè si distruggeva una finestra già liberata.
         // NON riordinare: il compilatore non protesterebbe, il bug tornerebbe.
+        ApplicationSpecification m_Specification;
+
         std::unique_ptr<GLFWContext> m_GLFWContext;
         std::unique_ptr<Window>      m_Window;
 
@@ -71,7 +120,8 @@ namespace Ignis {
         static Application* s_Instance;
     };
 
-    // Funzione da definire nel CLIENT (Editor o Gioco Standalone)
-    Application* CreateApplication();
+    // Funzione da definire nel CLIENT (Editor o Gioco Standalone).
+    // Riceve gli argomenti della riga di comando: è il client a decidere cosa farne.
+    Application* CreateApplication(ApplicationCommandLineArgs args);
 
 }

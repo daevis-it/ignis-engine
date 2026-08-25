@@ -5,10 +5,11 @@
 // usando SOLO gli header pubblici. Se un giorno questo file non compila più mentre
 // l'editor sì, vuol dire che abbiamo fatto passare un dettaglio interno nell'API.
 
-class SandboxApplication : public Ignis::Application
+class SandboxApplication final : public Ignis::Application
 {
 public:
-    SandboxApplication()
+    explicit SandboxApplication(const Ignis::ApplicationSpecification& spec)
+        : Application(spec)
     {
         IGNIS_INFO("Sandbox avviato: sto usando Ignis come farebbe un gioco vero.");
     }
@@ -16,7 +17,21 @@ public:
     ~SandboxApplication() override = default;
 };
 
-Ignis::Application* Ignis::CreateApplication()
+Ignis::Application* Ignis::CreateApplication(Ignis::ApplicationCommandLineArgs args)
 {
-    return new SandboxApplication();
+    Ignis::ApplicationSpecification spec;
+    spec.Name          = "Sandbox";
+    spec.Window.Title  = "Sandbox — un gioco su Ignis";
+    spec.Window.Width  = 1280;
+    spec.Window.Height = 720;
+    spec.Window.VSync  = true;
+
+    // IL PUNTO DI QUESTO FILE: un gioco non ha bisogno di ImGui, e non deve pagarlo.
+    // Con questa riga il Sandbox non crea il contesto, non carica l'atlas dei font e
+    // non fa un NewFrame/Render a vuoto a ogni frame.
+    spec.EnableImGui = false;
+
+    spec.CommandLineArgs = args;
+
+    return new SandboxApplication(spec);
 }

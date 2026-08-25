@@ -4,7 +4,7 @@ Game engine 2D/3D scritto da zero in C++20, con Editor visivo integrato.
 Progetto personale a scopo di apprendimento: capire il **perché** dei motori moderni
 costruendone uno, non replicarne le feature.
 
-> **Stato attuale — iterazione #1 in corso. Task `01`, `02` e `03` CHIUSI.**
+> **Stato attuale — iterazione #1 in corso. Task `01`–`04` e `05a` CHIUSI.**
 > Il progetto è stato ristrutturato da eseguibile monolitico a **tre target**
 > (`Ignis` libreria + `IgnisEditor` + `Sandbox`), con separazione **Public/Private** degli
 > header e dipendenze via **FetchContent**.
@@ -47,8 +47,8 @@ fatto sono due cose diverse.
 | **Compilatori** | GCC 13 su Linux · MSVC (Visual Studio 2026) su Windows |
 | **IDE** | **CLion su entrambi i sistemi.** Visual Studio 2026 non funziona con questo setup |
 | **Finestre e input** | GLFW 3.4 (via FetchContent) |
-| **Grafica** | OpenGL 3.3 Core Profile |
-| **GL loader** | GLAD (generato per GL 3.3 Core, versionato in `Ignis/vendor/glad/`) |
+| **Grafica** | OpenGL **4.5 Core Profile** con Direct State Access |
+| **GL loader** | GLAD (generato per GL **4.5** Core, versionato in `Ignis/vendor/glad/`) |
 | **Matematica** | GLM 1.0.1 (via FetchContent — dichiarata, non ancora usata) |
 | **GUI** | Dear ImGui, branch `docking`, pinnato a `fd13a1e8` |
 
@@ -155,6 +155,55 @@ all'`Application` tramite `EventCallback`.
 > funzioni C: non possono catturare stato. Il puntatore utente è il canale che GLFW offre
 > per riattaccare l'oggetto C++ alla finestra che ha generato l'evento — ed è ciò che
 > permetterà di avere più finestre senza riscrivere niente.
+
+### Ciclo di vita di GLFW
+
+`GLFWContext` (in `Private/`) è RAII sul contesto globale: `glfwInit()` nel costruttore,
+`glfwTerminate()` nel distruttore. `Application` lo dichiara **prima** di `m_Window`.
+
+```cpp
+std::unique_ptr<GLFWContext> m_GLFWContext;   // costruito 1°, distrutto per ULTIMO
+std::unique_ptr<Window>      m_Window;        // costruito 2°, distrutto per PRIMO
+```
+
+> **Quelle due righe sono codice funzionale, non stile.** I membri si distruggono in ordine
+> inverso di dichiarazione, quindi la finestra muore prima che GLFW venga terminata — **per
+> costruzione, non per attenzione**. Prima `glfwTerminate()` stava nel corpo di
+> `~Application` e girava *prima* di `~Window`: si distruggeva una finestra già liberata, e
+> l'errore era invisibile perché non c'era nessuna error callback. Se qualcuno riordina quei
+> due membri il compilatore tace e il bug torna.
+
+Verificato con un test che conta gli errori riportati dalla callback GLFW durante la
+distruzione, compilato in due varianti dallo stesso sorgente: ordine attuale **0 errori**,
+ordine precedente **1 errore** (`The GLFW library is not initialized`). Il controtest serve
+a dimostrare che il test *sa fallire*.
+
+**`glfwSetErrorCallback` è installata prima di `glfwInit`**, non dopo: GLFW lo consente
+apposta, ed è l'unico modo di vedere anche gli errori dell'inizializzazione stessa. La
+differenza pratica, eseguendo senza display:
+
+```
+prima:  [ERRORE] Errore durante l'inizializzazione di GLFW!      → poi abort dentro ImGui
+ora:    [ERROR]  GLFW [65550]: X11: The DISPLAY environment variable is missing
+        [ERROR]  Avvio fallito: glfwInit() non riuscita. …       → exit ordinato
+```
+
+Quel messaggio GLFW **esisteva già**: semplicemente non lo ascoltava nessuno.
+
+### Errori fatali di avvio: eccezioni
+
+`GLFWContext` e `Window` **lanciano** `std::runtime_error` se non riescono a inizializzarsi;
+`main()` in `EntryPoint.h` cattura, logga e ritorna `EXIT_FAILURE`.
+
+> **Le eccezioni servono solo qui.** Un errore di avvio succede una volta o mai, quindi non
+> costa niente, e c'è un punto unico dove si decide cosa farne — utile a Fase 5, quando il
+> Launcher dovrà poter dire "questo progetto non si apre" invece di sparire. **Non sono
+> flusso di controllo e non entrano nel game loop.**
+
+> **Attenzione a una sottigliezza in `Window`:** se `gladLoadGLLoader` fallisce lanciamo *dal
+> costruttore*, e quando un costruttore lancia **il distruttore non viene chiamato**. La
+> finestra appena creata resterebbe appesa, quindi lì c'è una `glfwDestroyWindow` esplicita.
+> È l'unico punto del progetto in cui una pulizia manuale è corretta.
 
 ### Event system
 
@@ -311,12 +360,6 @@ Elenco onesto di ciò che è rotto o assente. Ogni voce rimanda al task che la c
 
 ### Bug aperti
 
-**`glfwDestroyWindow` viene chiamato dopo `glfwTerminate`** → task `04`
-`~Application` termina GLFW nel corpo; **poi** i membri si distruggono in ordine inverso,
-quindi `~Window` prova a distruggere una finestra che `glfwTerminate` ha già liberato.
-GLFW risponde `GLFW_NOT_INITIALIZED` — e siccome non c'è nessuna `glfwSetErrorCallback`
-installata, **quell'errore non lo vede nessuno**. Funziona per caso, non per costruzione.
-
 **Il resize non aggiorna il viewport OpenGL** → task `05`
 `glViewport` non compare in nessun punto del progetto. Non si nota oggi perché si disegna
 solo un `glClear` e ImGui gestisce il proprio viewport, ma al primo triangolo esce fuori.
@@ -324,26 +367,6 @@ In più si usa `glfwSetWindowSizeCallback`, che dà *screen coordinates*: per `g
 serve `glfwSetFramebufferSizeCallback`, e su schermi HiDPI i due numeri differiscono.
 
 ### Default silenziosi
-
-**`glfwInit()` fallito viene loggato e poi si prosegue comunque** → task `04`
-Verificato eseguendo `Sandbox` senza display:
-
-```
-[IGNIS INFO]: Avvio di Ignis Engine...
-[IGNIS ERRORE]: Errore durante l'inizializzazione di GLFW!
-[IGNIS ERRORE]: Impossibile creare la finestra GLFW!
-Sandbox: window.c:1088: glfwSetWindowFocusCallback: Assertion `window != NULL' failed.
-```
-
-Due errori corretti e ignorati, poi un abort dentro ImGui con un messaggio che non nomina
-nessuna delle due cause reali. È esattamente il costo di un errore che non ferma il flusso.
-
-**`gladLoadGLLoader` non è controllato** → task `04`
-Se fallisce, ogni puntatore a funzione GL resta nullo e la prima chiamata segfaulta senza
-una riga di spiegazione.
-
-**`Window::Window` in errore fa `return`** → task `05`
-Lascia l'oggetto in stato invalido, che l'`Application` usa allegramente.
 
 ### Buchi architetturali
 
@@ -394,14 +417,23 @@ serva davvero.
 precompilata non servivano, perché qualcun altro aveva già compilato. L'errore è esplicito
 (`RandR headers not found`), ma arriva a metà configure.
 
-**La versione OpenGL riportata differisce fra le due macchine, ed è normale.** Chiediamo
-un contesto 3.3 Core nei window hints; NVIDIA lo onora alla lettera e riporta `3.3.0`,
-Mesa restituisce invece il massimo compatibile all'indietro (`4.6 Core Profile`). Quindi
-**il portatile riporta una versione più alta della workstation con la RTX.** Il rischio
-sarebbe scrivere codice che usa una funzione 4.x, vederlo funzionare su Linux e non
-compilare su Windows: in pratica GLAD lo impedisce, perché è generato per 3.3 e i simboli
-più recenti non esistono affatto. Da ricordare il giorno che si rigenera GLAD per una
-versione diversa.
+**I window hints chiedono un MINIMO, non una versione esatta — e la versione target la
+decide GLAD.** Chiediamo 4.5 Core, ma le due macchine rispondono diversamente:
+
+```
+Windows / RTX 5070 :  GLAD ha caricato OpenGL 4.5  ·  4.5.0 NVIDIA 610.88
+Linux   / Iris Xe  :  GLAD ha caricato OpenGL 4.6  ·  4.6 (Core Profile) Mesa 25.2.8
+```
+
+Entrambi sono **conformi alla spec**: i Core profile dalla 3.2 in poi sono retrocompatibili,
+quindi un'implementazione può restituire qualsiasi contesto ≥ a quello richiesto. NVIDIA dà
+esattamente il minimo, Mesa dà il massimo che ha. In GLFW non esiste un modo di dire "4.5 e
+non un dito di più".
+
+> **Quindi ciò che tiene allineate le due macchine non sono gli hint: è GLAD.** Il binding è
+> generato per 4.5, perciò i simboli 4.6 non esistono nel progetto e una chiamata a una
+> funzione 4.6 non compila su nessuna delle due. **La versione target di Ignis si cambia
+> rigenerando GLAD, non modificando i window hints.**
 
 **I colori ANSI su Windows vanno chiesti.** Il terminale Windows moderno capisce le
 sequenze ANSI, ma solo dopo una `SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)`

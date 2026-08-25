@@ -24,6 +24,7 @@ namespace Ignis {
 
     private:
         bool OnWindowClose(WindowCloseEvent& e);
+        bool OnWindowResize(WindowResizeEvent& e);
 
         // ══ L'ORDINE DI QUESTI DUE MEMBRI È LA CORREZIONE DEL TASK 04 ══
         // I membri si distruggono in ordine INVERSO di dichiarazione. Il contesto

@@ -30,7 +30,9 @@ valle: una base propria per piccoli giochi indie e per insegnare game dev.
 | D4 | Struttura repo | Tre target: `Ignis` (lib statica), `IgnisEditor` (exe), `Sandbox` (exe) | Confini fisici invece che convenzionali. `Sandbox` prova che l'engine è linkabile dall'esterno: in un target unico gli errori di accoppiamento restano invisibili perché tanto compila lo stesso. |
 | D5 | Standard | C++20 (non 23) | `std::format` è disponibile sia su GCC 13 sia su MSVC 2022+. C++23 è supportato a macchie diverse dai due compilatori: rischio di codice che compila su una macchina e non sull'altra. |
 | D6 | Precompiled header | Sì, da subito (`ignispch.h`) | ImGui e GLFW sono decine di migliaia di righe di header ricompilate per ogni `.cpp`. Introdurlo ora costa dieci minuti; a Fase 3 significa toccare cinquanta file. |
-| D7 | Astrazione RendererAPI | Rimandata | OpenGL diretto in Fase 2, dietro classi RAII. L'astrazione multi-API si introduce quando esiste una seconda API vera, non prima. |
+| D7 | Astrazione RendererAPI | Rimandata | OpenGL diretto in Fase 2, dietro classi RAII. L'astrazione multi-API si introduce quando esiste una seconda API vera, non prima. Vulkan non è "un'altra implementazione dietro la stessa interfaccia": command buffer, render pass e sincronizzazione esplicita cambierebbero l'interfaccia stessa. Le astrazioni multi-API scritte prima di conoscere la seconda API si buttano quasi sempre. |
+| D8 | **OpenGL 4.5 Core con DSA** (era 3.3) | Deciso il 2026-08-25 | Direct State Access elimina il modello *bind-to-edit*: `glNamedBufferData(id, …)` invece di `glBindBuffer` + `glBufferData`. Meno stato globale, meno bug da stato sporco, e un modello concettualmente più vicino a Vulkan/DX12. 4.5 e non 4.6 perché DSA è già completo in 4.5 e copre GPU dal 2014 invece che dal 2017 — utile se altri indie useranno l'engine. **Costo accettato: macOS resta fuori** (Apple è ferma a 4.1 e ha deprecato OpenGL nel 2018). |
+| D9 | Niente Vulkan, per ora | Deciso il 2026-08-25 | I concetti che l'engine deve insegnare — batching, scene graph, ECS, framebuffer, materiali — sono **identici** nelle due API. Vulkan aggiunge concetti di *driver* (swapchain, descriptor set, sincronizzazione) e circa mille righe prima del primo triangolo. In più richiede l'SDK LunarG installato a mano, contro la decisione D2. Ciò che sopravvivrebbe a un'eventuale migrazione — scena, ECS, asset, editor — è esattamente ciò che stiamo per costruire. |
 
 ### Decisioni rimandate
 
@@ -67,7 +69,7 @@ con cattura dell'input, Timestep nel game loop, `ApplicationSpecification` con a
 da riga di comando. Da qui in poi ogni sistema nuovo ha un posto dove nascere.
 
 ### Fase 2 — Renderer 2D
-Astrazione di OpenGL a strati sottili: `Shader`, `VertexBuffer`/`IndexBuffer`,
+Astrazione di OpenGL **4.5 con DSA** a strati sottili: `Shader`, `VertexBuffer`/`IndexBuffer`,
 `BufferLayout`, `VertexArray`, `Texture2D`. Tutte RAII e **non copiabili** — copy
 `= delete`, move implementato: il doppio `glDelete*` su un ID condiviso è il bug classico
 di questa fase, e nasce proprio da una classe che libera una risorsa GPU nel distruttore

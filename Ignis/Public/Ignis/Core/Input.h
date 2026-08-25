@@ -1,15 +1,24 @@
 #pragma once
-#include <utility> // Serve per std::pair
+
+#include "Ignis/Core/KeyCodes.h"
+#include "Ignis/Core/MouseCodes.h"
+
+#include <utility>
 
 namespace Ignis
 {
-    class Input {
+    // Interfaccia statica sullo stato dei dispositivi.
+    //
+    // Non duplica il sistema di eventi, lo completa: gli eventi dicono COS'È
+    // SUCCESSO (il salto si fa lì), l'Input dice COM'È ADESSO (il movimento
+    // continuo si fa qui). Servono entrambi, e chiedere lo stato a un evento è
+    // il modo classico di ottenere controlli che "saltano".
+    class Input
+    {
     public:
-        // Tastiera
-        static bool IsKeyPressed(int keycode);
+        static bool IsKeyPressed(KeyCode key);
 
-        // Mouse
-        static bool IsMouseButtonPressed(int button);
+        static bool IsMouseButtonPressed(MouseCode button);
         static std::pair<float, float> GetMousePosition();
         static float GetMouseX();
         static float GetMouseY();

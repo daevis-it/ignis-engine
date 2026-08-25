@@ -49,4 +49,26 @@ namespace Ignis
         EventType GetEventType() const override { return GetStaticType(); }
         const char* GetName() const override { return "KeyReleased"; }
     };
+
+    // NON è un duplicato di KeyPressedEvent. KeyPressed dice quale TASTO è sceso;
+    // KeyTyped dice quale CARATTERE ne è uscito, con layout di tastiera, modificatori
+    // e dead key già applicati dal sistema operativo. Premere il tasto della E con
+    // Shift produce un KeyPressed(E) e un KeyTyped('E').
+    // Serve all'input di testo — ImGui lo usa per i campi di scrittura.
+    class KeyTypedEvent : public KeyEvent {
+    public:
+        explicit KeyTypedEvent(unsigned int codepoint)
+            : KeyEvent(static_cast<int>(codepoint)) {}
+
+        // Il codepoint Unicode, non un keycode GLFW.
+        inline unsigned int GetCodepoint() const { return static_cast<unsigned int>(m_KeyCode); }
+
+        std::string ToString() const override {
+            return std::format("KeyTypedEvent: U+{:04X}", static_cast<unsigned int>(m_KeyCode));
+        }
+
+        static EventType GetStaticType() { return EventType::KeyTyped; }
+        EventType GetEventType() const override { return GetStaticType(); }
+        const char* GetName() const override { return "KeyTyped"; }
+    };
 }

@@ -4,6 +4,10 @@
 #include "Ignis/Core/Input.h"
 #include "Ignis/Core/Logger.h"
 
+// Window.h non li espone più: chi usa OpenGL se lo include da sé. Queste due
+// chiamate GL sono provvisorie e migreranno nel Renderer alla Fase 2.
+#include <glad/glad.h>
+
 #include <imgui.h>
 
 namespace Ignis {
@@ -17,7 +21,12 @@ namespace Ignis {
         // ferma qui: non c'è nessun percorso in cui si prosegue con una GLFW morta.
         m_GLFWContext = std::make_unique<GLFWContext>();
 
-        m_Window = std::make_unique<Window>(800, 600, "Ignis Engine");
+        m_Window = std::make_unique<Window>(WindowProps{
+            .Title  = "Ignis Engine",
+            .Width  = 1280,
+            .Height = 720,
+            .VSync  = true
+        });
         m_Window->SetEventCallback([this](Event& e) { this->OnEvent(e); });
 
         m_ImGuiLayer.Init();
@@ -36,6 +45,9 @@ namespace Ignis {
         dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& event) {
             return this->OnWindowClose(event);
         });
+        dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& event) {
+            return this->OnWindowResize(event);
+        });
     }
 
     bool Application::OnWindowClose(WindowCloseEvent&) {
@@ -43,11 +55,22 @@ namespace Ignis {
         return true;
     }
 
+    bool Application::OnWindowResize(WindowResizeEvent& e) {
+        // glViewport lo chiama l'Application, NON la Window: la Window è il sistema
+        // di finestre, non il renderer. Quando il Renderer esisterà, si prenderà
+        // questo compito senza che la Window debba cambiare di una riga.
+        glViewport(0, 0, static_cast<GLsizei>(e.GetWidth()), static_cast<GLsizei>(e.GetHeight()));
+
+        // false: l'evento NON è consumato. Il resize interessa anche a chi verrà
+        // dopo — l'ImGuiLayer oggi, i layer di gioco appena esisteranno.
+        return false;
+    }
+
     void Application::Run() {
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 
         while (m_Running) {
-            if (Input::IsKeyPressed(GLFW_KEY_ESCAPE))
+            if (Input::IsKeyPressed(KeyCode::Escape))
                 m_Running = false;
 
             glClear(GL_COLOR_BUFFER_BIT);

@@ -18,19 +18,14 @@ target_include_directories(Ignis
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Private
 )
 
-# PUBLIC e non PRIVATE perché Window.h espone <glad/glad.h> e <GLFW/glfw3.h>.
-# È un debito noto — l'header pubblico ridistribuisce GLFW ai client — e si salda al task 05.
-target_link_libraries(Ignis PUBLIC glad glfw glm::glm imgui)
-
-# IGNIS_DEBUG viene da QUI, non da NDEBUG. NDEBUG è un dettaglio di come CMake
-# configura la Release; un flag nostro ci lascia liberi di fare un giorno una
-# "Debug ottimizzata" o una "Release con assert" senza combattere con lo standard.
-# PUBLIC perché IGNIS_ASSERT vive in un header pubblico: anche i client ne dipendono.
-target_compile_definitions(Ignis PUBLIC $<$<CONFIG:Debug>:IGNIS_DEBUG>)
-
-# Precompiled header, solo per l'engine (editor e Sandbox sono un file ciascuno).
-# CMake genera da sé l'unità di traduzione necessaria: non serve un ignispch.cpp.
-target_precompile_headers(Ignis PRIVATE Private/ignispch.h)
+# PRIVATE, dal task 05c: nessun header pubblico include più glad, GLFW o ImGui,
+# quindi i client non li vedono e non li linkano. Un gioco costruito su Ignis non
+# sa — e non deve sapere — quale libreria di finestre c'è sotto.
+# glm resta PUBLIC: la matematica è parte dell'API che i giochi useranno.
+target_link_libraries(Ignis
+    PRIVATE glad glfw imgui
+    PUBLIC  glm::glm
+)
 
 if(MSVC)
     # /utf-8          i sorgenti hanno commenti accentati: senza questo MSVC li legge

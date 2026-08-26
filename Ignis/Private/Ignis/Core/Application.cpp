@@ -84,7 +84,8 @@ namespace Ignis {
     }
 
     void Application::OnEvent(Event& e) {
-        IGNIS_CORE_TRACE("{}", e.ToString());
+        // Debug purpose only: per stampare i log dei ToString() degli specifici eventi
+        // IGNIS_CORE_TRACE("{}", e.ToString());
 
         // Gli eventi di SISTEMA li gestisce l'Application, prima dei layer.
         // WindowClose viene consumato di proposito: se un layer potesse trattenerlo,

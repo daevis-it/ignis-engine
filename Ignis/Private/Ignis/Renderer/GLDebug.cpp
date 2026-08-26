@@ -133,8 +133,6 @@ namespace Ignis
                               0, nullptr, GL_FALSE);
 
         IGNIS_CORE_INFO("Debug output OpenGL attivo (sincrono; NOTIFICATION filtrate).");
-
-        // glEnable(GL_TEXTURE_2D);   // VERIFICA task 12 — da togliereS
 #else
         IGNIS_CORE_INFO("Debug output OpenGL non attivo: build Release.");
 #endif

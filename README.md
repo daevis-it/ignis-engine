@@ -18,10 +18,10 @@ costruendone uno, non replicarne le feature.
 >
 > **Visual Studio 2026 non è supportato**, vedi *Trappole già pagate*.
 >
-> Quello che l'engine sa fare oggi: aprire una finestra OpenGL 3.3, ricevere eventi di
+> Quello che l'engine sa fare oggi: aprire una finestra OpenGL 4.5 Core, ricevere eventi di
 > tastiera/mouse/finestra e smistarli, esporre un Input statico, loggare, e disegnare
-> l'interfaccia ImGui con docking e multi-viewport. **Non disegna ancora nulla di suo:**
-> non esiste un renderer.
+> l'interfaccia ImGui con il docking attivo (i viewport no, vedi D14).
+> **Non disegna ancora nulla di suo:** non esiste un renderer.
 
 ---
 
@@ -153,18 +153,6 @@ produrrebbe due `main()` nello stesso binario.
 Singleton di fatto (`Application::Get()`), possiede la finestra e fa girare il loop.
 Riceve gli eventi dalla `Window` attraverso una callback installata alla costruzione e li
 smista con l'`EventDispatcher`.
-
-### Window
-
-Incapsula GLFW: crea la finestra, imposta il contesto OpenGL 3.3 Core, inizializza GLAD e
-installa le callback native. Ogni callback recupera la propria `WindowData` con
-`glfwGetWindowUserPointer` e **traduce l'evento GLFW in un evento Ignis**, che spedisce
-all'`Application` tramite `EventCallback`.
-
-> **Perché il puntatore utente invece di una variabile globale.** Le callback GLFW sono
-> funzioni C: non possono catturare stato. Il puntatore utente è il canale che GLFW offre
-> per riattaccare l'oggetto C++ alla finestra che ha generato l'evento — ed è ciò che
-> permetterà di avere più finestre senza riscrivere niente.
 
 ### LayerStack
 
@@ -379,8 +367,9 @@ if (Input::IsMouseButtonPressed(MouseCode::ButtonLeft)) { … }
 a mano. I valori numerici coincidono con quelli GLFW di proposito, così la conversione è un
 cast invece di una tabella da mantenere allineata.
 
-> **Il prezzo di quella scorciatoia sono quattordici `static_assert` in `Input.cpp`**, sui
-> confini di ogni blocco della tabella:
+> **Il prezzo di quella scorciatoia sono diciotto `static_assert` in `Input.cpp`**
+> (quattordici sui tasti, quattro sui pulsanti del mouse), piazzati sui confini di ogni
+> blocco della tabella:
 > ```cpp
 > static_assert(static_cast<int>(KeyCode::Escape) == GLFW_KEY_ESCAPE);
 > ```
@@ -413,7 +402,7 @@ assi indipendenti: il **tipo** (`EventType`, uno solo per evento) e le **categor
 
 ```cpp
 // Un evento di tastiera appartiene a DUE categorie contemporaneamente:
-int GetCategoryFlags() const override { return EventCategoryKeyboard | EventCategoryInput; }
+IGNIS_EVENT_CLASS_CATEGORY(EventCategory::Keyboard | EventCategory::Input)
 ```
 
 > **Perché il bitmasking e non un secondo enum.** Un `KeyPressedEvent` è
@@ -423,14 +412,10 @@ int GetCategoryFlags() const override { return EventCategoryKeyboard | EventCate
 
 L'`EventDispatcher` usa i template per confrontare il tipo runtime dell'evento con il tipo
 che una funzione sa gestire, e in caso di corrispondenza fa il cast e la chiama. Il flag
-`Handled` serve a fermare la propagazione — **oggi lo scrive solo l'`Application` e non lo
-legge nessuno**, perché manca il LayerStack (task `08`).
-
-### Input
-
-Interfaccia statica che interroga GLFW direttamente, disaccoppiata dagli eventi: gli eventi
-dicono *cos'è successo*, l'Input risponde a *com'è adesso*. Servono entrambi — il salto
-si fa sull'evento, il movimento continuo sullo stato.
+`Handled` ferma la propagazione: lo legge `Application::OnEvent` a ogni giro del ciclo a
+ritroso sul `LayerStack`, e lo scrive chiunque abbia consumato l'evento — oggi
+l'`Application` per `WindowClose`, l'`ImGuiLayer` quando ImGui vuole l'input, e
+l'`EditorLayer` per ESC.
 
 ### Logger
 
@@ -523,9 +508,10 @@ un'ottimizzazione, non un modo per smettere di scrivere gli include.**
 
 ### ImGuiLayer
 
-Inizializza Dear ImGui con i backend GLFW + OpenGL3, abilita **docking** e
-**multi-viewport** (finestre trascinabili fuori dall'applicazione). `Begin()` e `End()`
-delimitano il frame UI dentro il game loop.
+Inizializza Dear ImGui con i backend GLFW + OpenGL3 e abilita il **docking**. I
+**viewport** (pannelli trascinabili fuori come finestre del sistema) sono **disattivati**:
+la riga `ViewportsEnable` è commentata sul posto con la motivazione — vedi D14 in ROADMAP e
+*Trappole già pagate*. `Begin()` e `End()` delimitano il frame UI dentro il game loop.
 
 > **L'ordine di inizializzazione conta e non è documentato in nessun errore.**
 > `Window` installa le proprie callback GLFW nel costruttore; **poi**
@@ -542,7 +528,7 @@ delimitano il frame UI dentro il game loop.
 |---|---|---|
 | **D1** | Toolchain Windows: **MSVC** | Compilatore nativo, miglior supporto driver NVIDIA e tooling grafico. Più severo di GCC: fa emergere gli errori di portabilità invece di nasconderli. |
 | **D2** | Dipendenze via **FetchContent** | Versioni dichiarate nel CMake con commit precisi, scaricate e compilate al configure. Nessuna installazione a sistema, build riproducibile ovunque. |
-| **D3** | **GLAD resta versionato** | Non è una libreria che evolve: è codice *generato una volta* per GL 3.3 Core. Sta in `Ignis/vendor/glad/` come target separato, così i warning severi dell'engine non lo toccano. |
+| **D3** | **GLAD resta versionato** | Non è una libreria che evolve: è codice *generato una volta*, oggi per **GL 4.5 Core** (rigenerato con D8; i parametri di generazione sono in `Ignis/vendor/glad/CMakeLists.txt`). Sta in `Ignis/vendor/glad/` come target separato, così i warning severi dell'engine non lo toccano. |
 | **D4** | **Tre target**, non uno | Vedi *Architettura*. `Sandbox` è il test che i confini esistano davvero. |
 | **D5** | **C++20**, non 23 | `std::format` esiste su GCC 13 e MSVC 2022+. Del C++23 i due compilatori supportano sottoinsiemi diversi: si finirebbe con codice che compila sul portatile e non sulla workstation. |
 | **D6** | **ImGui pinnato a un commit** | `docking` è un branch, non un tag: si muove. Un pin significa che fra sei mesi il repo compila ancora con l'ImGui su cui il codice è stato scritto. |
@@ -576,8 +562,9 @@ costo a runtime — contesto, font, `NewFrame`/`Render` — ma i simboli restano
 (~1000 in `Sandbox`). Per farli sparire davvero serve separare ImGui a livello di build,
 lavoro che ha senso quando ci sarà una pipeline di packaging vera (Fase 5).
 
-**Le due chiamate GL in `Application.cpp`** (`glClearColor`, `glClear`, `glViewport`) sono
-provvisorie e violano D11: migreranno nel Renderer alla Fase 2. Sono annotate sul posto.
+**Le tre chiamate GL in `Application.cpp`** (`glViewport`, `glClearColor`, `glClear`) sono
+provvisorie e violano D11: sono le uniche `gl*` di tutto il progetto, e migreranno nel
+`RenderCommand` al task `13`. Sono annotate sul posto.
 
 ### Impalcatura dichiarata, che aspetta il suo tetto
 

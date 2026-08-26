@@ -5,7 +5,9 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include "Ignis/Core/Base.h"
 #include "Ignis/Core/Logger.h"
+#include "Ignis/Renderer/GLDebug.h"
 #include "Ignis/Events/ApplicationEvent.h"
 #include "Ignis/Events/KeyEvent.h"
 #include "Ignis/Events/MouseEvent.h"
@@ -41,6 +43,18 @@ namespace Ignis
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+#if defined(IGNIS_DEBUG)
+        // Contesto di debug: è il prerequisito di glDebugMessageCallback, e va
+        // chiesto PRIMA di creare la finestra — dopo non si può più. Come per la
+        // versione, è una RICHIESTA: il driver può ignorarla, e InitGLDebugOutput
+        // verifica il risultato invece di dare per buona l'intenzione.
+        // Solo in Debug: un contesto di debug con output sincrono costa prestazioni.
+        //
+        // GLFW_CONTEXT_DEBUG è il nome moderno (GLFW 3.4, glfw3.h riga 1067);
+        // GLFW_OPENGL_DEBUG_CONTEXT ne è l'alias legacy, stesso valore.
+        glfwWindowHint(GLFW_CONTEXT_DEBUG, GLFW_TRUE);
+#endif
+
         m_Window = glfwCreateWindow(static_cast<int>(props.Width),
                                     static_cast<int>(props.Height),
                                     m_Data.Title.c_str(), nullptr, nullptr);
@@ -67,6 +81,11 @@ namespace Ignis
                 "sono stati caricati. Senza questo controllo, la prima chiamata GL "
                 "sarebbe stata un segfault senza spiegazione.");
         }
+
+        // Subito dopo GLAD e prima di qualunque altra chiamata GL: da qui in avanti
+        // ogni errore del driver ha una voce. Non è una gl* fuori posto — la
+        // funzione vive in Private/Ignis/Renderer/, che e' il perimetro di D17.
+        InitGLDebugOutput();
 
         IGNIS_CORE_INFO("GLAD ha caricato OpenGL {}.{}", GLVersion.major, GLVersion.minor);
         IGNIS_CORE_INFO("OpenGL   Vendor: {}", GLStringOrUnknown(GL_VENDOR));

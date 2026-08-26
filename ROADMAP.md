@@ -1,6 +1,6 @@
 # Ignis Engine — Roadmap
 
-> Documento di lavoro. Aggiornato: 2026-08-25 (fine iterazione #1).
+> Documento di lavoro. Aggiornato: 2026-08-26 (apertura iterazione #2).
 > **La verità sta nel codice.** Questo file è la mappa, non il territorio: quando una
 > decisione ci si appoggia, va verificata sui sorgenti.
 > Il `README.md` è la memoria operativa (stato per task, trappole pagate); questo file
@@ -26,7 +26,7 @@ valle: una base propria per piccoli giochi indie e per insegnare game dev.
 |---|---|---|---|
 | D1 | Toolchain Windows | MSVC / Visual Studio 2026 | Compilatore nativo, miglior supporto driver NVIDIA e tooling grafico (RenderDoc, NSight). Più severo di GCC: fa emergere gli errori di portabilità invece di nasconderli. |
 | D2 | Dipendenze | CMake FetchContent | GLFW, GLM e ImGui dichiarati con tag git precisi, scaricati e compilati al configure. Repo pulito, build riproducibile su qualsiasi macchina senza installare nulla a mano. |
-| D3 | GLAD | Resta committato in `vendor/glad/` | Non è una libreria che evolve: è codice *generato una volta* per GL 3.3 Core. Va versionato come se fosse proprio, annotando i parametri di generazione. |
+| D3 | GLAD | Resta committato in `vendor/glad/` | Non è una libreria che evolve: è codice *generato una volta*. Va versionato come se fosse proprio, annotando i parametri di generazione. **Rigenerato per GL 4.5 Core il 2026-08-25 con D8** — questa riga diceva ancora 3.3 fino al 2026-08-26. |
 | D4 | Struttura repo | Tre target: `Ignis` (lib statica), `IgnisEditor` (exe), `Sandbox` (exe) | Confini fisici invece che convenzionali. `Sandbox` prova che l'engine è linkabile dall'esterno: in un target unico gli errori di accoppiamento restano invisibili perché tanto compila lo stesso. |
 | D5 | Standard | C++20 (non 23) | `std::format` è disponibile sia su GCC 13 sia su MSVC 2022+. C++23 è supportato a macchie diverse dai due compilatori: rischio di codice che compila su una macchina e non sull'altra. |
 | D6 | Precompiled header | Sì, da subito (`ignispch.h`) | ImGui e GLFW sono decine di migliaia di righe di header ricompilate per ogni `.cpp`. Introdurlo ora costa dieci minuti; a Fase 3 significa toccare cinquanta file. |
@@ -40,6 +40,12 @@ valle: una base propria per piccoli giochi indie e per insegnare game dev.
 | D13 | **Data-driven come forma mentis, non come slogan** | Deciso il 2026-08-25 | Il modello è quello sperimentato su Unreal: **il codice definisce i verbi, i dati definiscono tutto il resto**. C++ (e domani Vesta) dice *cosa un sistema sa fare*; i file dicono *quali entità esistono, con quali componenti, con quali valori*. Aggiungere contenuto non deve richiedere una ricompilazione, e una scena è un file, non codice. |
 
 | D14 | **Viewport ImGui disattivati; docking attivo** | Deciso il 2026-08-25 | I viewport (pannelli trascinabili fuori come finestre del sistema) si rompono su Linux in modo dipendente dal window manager: le finestre senza decorazioni che ImGui crea non ricevono il focus della **tastiera** — il mouse sì. Problema noto e aperto a monte (ocornut/imgui #2117, thread dedicato ai WM Linux; il maintainer: *"I am not a Linux user"*). Linux è il sistema di sviluppo primario: una feature che si rompe lì non ha posto. Il **docking**, che è la parte utile, resta attivo. Da rivalutare alla Fase 4. |
+
+| D15 | **I percorsi degli asset si risolvono rispetto all'ESEGUIBILE, non alla cwd** | Deciso il 2026-08-26 | D13 vieta i percorsi hardcodati, quindi gli shader sono file `.glsl`, non stringhe dentro un `.cpp` che si buttano al primo task. Ma la cwd non è un ancoraggio affidabile: `ApplicationSpecification::WorkingDirectory` la sposta già oggi, e il Launcher della Fase 5 la sposterà sempre. La forma minima è **una funzione sola** che risolve un percorso relativo rispetto alla cartella dell'eseguibile. Costa dieci righe adesso ed è esattamente la giuntura su cui monterà il VFS in Fase 5: chi chiama non cambia, cambia solo cosa c'è sotto. Portabilità: la cartella dell'eseguibile si ottiene da `argv[0]` — che non è affidabile su tutti i sistemi — oppure dalle API native (`/proc/self/exe` su Linux, `GetModuleFileNameW` su Windows). **Va isolata in un punto solo**, come `localtime_r`/`localtime_s` in `Logger.cpp`. |
+
+| D16 | **Il primo client del Renderer 2D è il `Sandbox`, non l'editor** | Deciso il 2026-08-26 | Il quad si disegna nel `Sandbox`. Se il renderer fosse usabile solo dall'editor avremmo sbagliato l'API pubblica senza accorgercene, ed è esattamente il motivo per cui `Sandbox` esiste (D4). L'editor prenderà la scena dentro un framebuffer alla Fase 4: è un caso d'uso in più, non il primo. |
+
+| D17 | **Il perimetro di D11 è il modulo Renderer, non solo le cinque classi** | Deciso il 2026-08-26 | D11 elenca `Shader`, `Buffer`, `Texture`, `VertexArray`, `Framebuffer` — cioè le classi che possiedono una *risorsa*. Ma due punti del renderer chiamano GL senza possedere niente: il **debug output** (`glDebugMessageCallback`, task `12`) e il **RenderCommand** (`glViewport`, `glClear`, `glDrawElements`, task `13`). Non sono un'eccezione a D11, sono la sua lettura corretta: la regola vera è *nessuna chiamata GL fuori da `Ignis/Private/Ignis/Renderer/`*. Fuori da lì — `Application`, `Window`, i layer, i client — `gl*` resta vietato, e oggi le tre chiamate in `Application.cpp` sono l'unica violazione aperta. |
 
 ### Decisioni rimandate
 
@@ -213,9 +219,36 @@ Controllo dell'albero Public/Private fatto alla chiusura, su segnalazione. Esito
   in silenzio quello pubblico. Ora la configure fallisce con un messaggio esplicito.
   *Verificata creando apposta un omonimo.*
 
-### Iterazione #2 — da definire
+### Iterazione #2 — APERTA (2026-08-26)
 
-Fase 2, il Renderer 2D. I task si numerano da `12`.
+Fase 2, il Renderer 2D. Task da `12` a `21`. **Il contenuto dell'iterazione arriva fino al
+`20` incluso** (batching con più texture); il `21` è la chiusura. Verifica finale
+dell'iterazione: **mille quad in una sola draw call, dimostrato da un contatore, non a
+occhio.**
+
+| # | Task | Verifica |
+|---|---|---|
+| `12` | Contesto di debug OpenGL, `glDebugMessageCallback` nel Logger | una chiamata GL illegale produce una riga ERROR col messaggio del driver; **controtest**: senza callback, silenzio |
+| `13` | `RenderCommand` + `Renderer`; le tre `gl*` escono da `Application.cpp` | zero `gl*` in `Application.cpp`; il colore di sfondo si cambia da una riga del client |
+| `14` | `Shader` (RAII, copy `= delete`, move; uniform via `glProgramUniform*`) | shader con errore di sintassi → messaggio del driver e fallimento rumoroso; **controtest**: shader valido passa |
+| `15` | `VertexBuffer`, `IndexBuffer`, `BufferLayout` (`glCreateBuffers`, `glNamedBufferStorage`) | stride e offset calcolati dal layout uguali a valori attesi **distinti** (tipi diversi, niente 4/4/4) |
+| `16` | `VertexArray` (`glVertexArrayAttribFormat` / `AttribBinding`) | **un quad colorato a schermo** |
+| `17` | `OrthographicCamera` — primo uso vero di GLM | il quad resta quadrato al resize; muovendo la camera si sposta in senso **opposto** |
+| `18` | `Texture2D` + `stb_image` | quad texturato; **controtest**: file mancante → errore esplicito, non una texture bianca |
+| `19` | `Renderer2D` con batching + `Renderer2D::Stats` | 1000 quad → `DrawCalls == 1`; **controtest**: con limite 20000, disegnarne 20001 → `DrawCalls == 2` |
+| `20` | Slot di texture nel batch (32 sampler, indice per vertice) | due texture diverse e due tinte diverse in **una** draw call |
+| `21` | Chiusura: pulizia contestuale, README, ROADMAP, commit | — |
+
+Decisioni prese all'apertura: **D15** (percorsi relativi all'eseguibile), **D16** (il quad
+lo disegna il `Sandbox`), **D17** (perimetro di D11).
+
+**Debito saldato in apertura:** il README diceva il falso in sei punti (OpenGL 3.3 in tre
+posti fra cui D3, un blocco `### Window` e uno `### Input` rimasti da prima dei task `05b`
+e `05c`, il flag `Handled` descritto come "non lo legge nessuno" quando il LayerStack c'è
+dal task `08`, i viewport ImGui dati per attivi quando D14 li ha spenti, "due chiamate GL"
+che erano tre, e uno snippet di `GetCategoryFlags` con la firma pre-task-`06`). Corretti
+tutti prima di scrivere una riga di codice. **D3 in questo file diceva ancora 3.3**: era
+stata contraddetta da D8 e nessuno l'aveva aggiornata.
 
 ## Sistemi da integrare
 

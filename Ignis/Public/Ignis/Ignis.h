@@ -17,6 +17,8 @@
 #include "Ignis/Core/MouseCodes.h"
 #include "Ignis/Core/Window.h"
 
+#include "Ignis/Renderer/RenderCommand.h"
+
 #include "Ignis/Events/Event.h"
 #include "Ignis/Events/ApplicationEvent.h"
 #include "Ignis/Events/KeyEvent.h"

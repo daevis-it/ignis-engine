@@ -12,6 +12,13 @@ public:
         : Application(spec)
     {
         IGNIS_INFO("Sandbox avviato: sto usando Ignis come farebbe un gioco vero.");
+
+        // Il colore di sfondo è una decisione DEL GIOCO, non del motore. Funziona
+        // perché il costruttore di Ignis::Application — che imposta il default e ha
+        // già creato finestra e contesto GL — è finito prima che questo corpo
+        // cominci. Magenta e non un altro verde-azzurro: se il task 13 fallisse, la
+        // differenza deve saltare all'occhio invece di somigliare al default.
+        Ignis::RenderCommand::SetClearColor({ 0.9f, 0.1f, 0.6f, 1.0f });
     }
 
     ~SandboxApplication() override = default;

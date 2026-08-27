@@ -12,9 +12,9 @@
 #include <format>
 #include <stdexcept>
 
-// Window.h non li espone più: chi usa OpenGL se lo include da sé. Queste due
-// chiamate GL sono provvisorie e migreranno nel Renderer alla Fase 2.
-#include <glad/glad.h>
+// Nessun header OpenGL qui dentro, dal task 13: le tre chiamate GL che stavano in
+// questo file vivono ora in RenderCommand, cioè in Private/Ignis/Renderer/ (D17).
+#include "Ignis/Renderer/RenderCommand.h"
 
 #include <filesystem>
 #include <utility>
@@ -52,6 +52,19 @@ namespace Ignis {
 
         m_Window = std::make_unique<Window>(m_Specification.Window);
         m_Window->SetEventCallback([this](Event& e) { this->OnEvent(e); });
+
+        // Colore di sfondo di default. STA QUI E NON IN Run() PER UN MOTIVO PRECISO:
+        // il costruttore della classe base gira PRIMA del corpo del costruttore del
+        // client, quindi un gioco che chiami SetClearColor nel proprio costruttore
+        // sovrascrive questo default. Se la stessa riga stesse in Run(), l'engine
+        // ricablerebbe il colore dopo la scelta del client, e la scelta del client
+        // non avrebbe alcun effetto — senza un solo messaggio d'errore.
+        //
+        // IMPALCATURA DICHIARATA: che sia l'engine a pulire lo schermo è provvisorio.
+        // Al task 19 sarà la scena a decidere cosa c'è dietro. Non lo togliamo adesso
+        // perché un client che si dimenticasse di pulire vedrebbe spazzatura, ed è
+        // esattamente il tipo di default silenzioso che non vogliamo.
+        RenderCommand::SetClearColor({ 0.2f, 0.3f, 0.3f, 1.0f });
 
         if (m_Specification.EnableImGui)
         {
@@ -115,10 +128,10 @@ namespace Ignis {
     }
 
     bool Application::OnWindowResize(WindowResizeEvent& e) {
-        // glViewport lo chiama l'Application, NON la Window: la Window è il sistema
-        // di finestre, non il renderer. Quando il Renderer esisterà, si prenderà
-        // questo compito senza che la Window debba cambiare di una riga.
-        glViewport(0, 0, static_cast<GLsizei>(e.GetWidth()), static_cast<GLsizei>(e.GetHeight()));
+        // Il viewport lo aggiorna l'Application, NON la Window: la Window è il
+        // sistema di finestre, non il renderer — emette l'evento e basta, e infatti
+        // non ha dovuto cambiare di una riga quando il RenderCommand è nato.
+        RenderCommand::SetViewport(0, 0, e.GetWidth(), e.GetHeight());
 
         // false: l'evento NON è consumato. Il resize interessa anche a chi verrà
         // dopo — l'ImGuiLayer oggi, i layer di gioco appena esisteranno.
@@ -126,8 +139,6 @@ namespace Ignis {
     }
 
     void Application::Run() {
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-
         m_LastFrameTime = std::chrono::steady_clock::now();
 
         while (m_Running) {
@@ -144,7 +155,7 @@ namespace Ignis {
 
             const Timestep timestep(deltaSeconds);
 
-            glClear(GL_COLOR_BUFFER_BIT);
+            RenderCommand::Clear();
 
             // Avanti: dal basso verso l'alto. Il gioco si aggiorna prima della UI
             // che lo mostra.

@@ -61,6 +61,28 @@ valle: una base propria per piccoli giochi indie e per insegnare game dev.
   dell'editor) **quando ci sarà il Launcher**, non prima. Per un gioco che usasse ImGui per
   il debug, `io.IniFilename = nullptr` disattiva del tutto il salvataggio.
 
+  > **Aggiornamento 2026-08-26: D15 lo risolve gratis, e prima del previsto.** La funzione
+  > che risolve un percorso rispetto alla cartella dell'eseguibile nasce al task `14` per
+  > gli shader; puntarci `io.IniFilename` è una riga in più nello stesso task, e toglie di
+  > mezzo il problema prima ancora che il Launcher lo crei. **Non è un anticipo di lavoro:
+  > è lo stesso lavoro con un secondo beneficiario.**
+  >
+  > Due trappole da non scoprire debuggando. La prima: `IniFilename` è un `const char*` che
+  > ImGui **non copia** (imgui.h riga 2532) — la stringa deve sopravvivere al contesto,
+  > quindi serve uno `std::string` statico, non un temporaneo. La seconda: "accanto
+  > all'eseguibile" va bene per una build di sviluppo, ma un editor installato in
+  > `Program Files` non ci può scrivere. La cura definitiva è la cartella di configurazione
+  > per utente, e quella resta di Fase 5.
+
+- **Persistenza del layout ImGui come scelta del client** — oggi la garanzia "un gioco non
+  crea `imgui.ini`" poggia su `EnableImGui = false`, che è una garanzia forte perché non
+  esiste proprio nessun contesto ImGui. Ma un gioco che volesse ImGui per un HUD di debug
+  ricomincerebbe a scrivere il file accanto all'eseguibile del giocatore. La forma naturale
+  è un campo in `ApplicationSpecification` (l'editor lo vuole, un gioco quasi mai) che
+  l'`ImGuiLayer` traduce in `io.IniFilename = nullptr`. **Da fare quando esisterà il primo
+  gioco vero con ImGui acceso**, non prima: oggi sarebbe un interruttore senza nessuno che
+  lo giri.
+
 - **`Input` legato alla finestra principale** — `Input::IsKeyPressed` interroga sempre
   `Application::Get().GetWindow()`. Con una finestra sola è corretto; con più finestre
   (viewport ImGui, o un futuro multi-window) il polling non vede i tasti di quella che ha
@@ -228,7 +250,7 @@ occhio.**
 
 | # | Task | Verifica |
 |---|---|---|
-| `12` | Contesto di debug OpenGL, `glDebugMessageCallback` nel Logger | una chiamata GL illegale produce una riga ERROR col messaggio del driver; **controtest**: senza callback, silenzio |
+| `12` | Contesto di debug OpenGL, `glDebugMessageCallback` nel Logger | **CHIUSO 2026-08-26**, verificato su Linux/GCC e Windows/MSVC: `glEnable(GL_TEXTURE_2D)` produce la riga ERROR; **controtest** superato (via la sola `glDebugMessageCallback` → la riga sparisce). Release non ancora eseguita su nessuno dei due. |
 | `13` | `RenderCommand` + `Renderer`; le tre `gl*` escono da `Application.cpp` | zero `gl*` in `Application.cpp`; il colore di sfondo si cambia da una riga del client |
 | `14` | `Shader` (RAII, copy `= delete`, move; uniform via `glProgramUniform*`) | shader con errore di sintassi → messaggio del driver e fallimento rumoroso; **controtest**: shader valido passa |
 | `15` | `VertexBuffer`, `IndexBuffer`, `BufferLayout` (`glCreateBuffers`, `glNamedBufferStorage`) | stride e offset calcolati dal layout uguali a valori attesi **distinti** (tipi diversi, niente 4/4/4) |

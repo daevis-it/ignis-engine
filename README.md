@@ -4,7 +4,8 @@ Game engine 2D/3D scritto da zero in C++20, con Editor visivo integrato.
 Progetto personale a scopo di apprendimento: capire il **perché** dei motori moderni
 costruendone uno, non replicarne le feature.
 
-> **Stato attuale — ITERAZIONE #1 CHIUSA. Fasi 0 e 1 complete (task `01`–`11`).**
+> **Stato attuale — ITERAZIONE #2 IN CORSO (Fase 2, Renderer 2D). Ultimo task chiuso: `12`.**
+> Fasi 0 e 1 complete (task `01`–`11`), chiuse il 2026-08-25.
 > Il progetto è stato ristrutturato da eseguibile monolitico a **tre target**
 > (`Ignis` libreria + `IgnisEditor` + `Sandbox`), con separazione **Public/Private** degli
 > header e dipendenze via **FetchContent**.
@@ -19,8 +20,9 @@ costruendone uno, non replicarne le feature.
 > **Visual Studio 2026 non è supportato**, vedi *Trappole già pagate*.
 >
 > Quello che l'engine sa fare oggi: aprire una finestra OpenGL 4.5 Core, ricevere eventi di
-> tastiera/mouse/finestra e smistarli, esporre un Input statico, loggare, e disegnare
-> l'interfaccia ImGui con il docking attivo (i viewport no, vedi D14).
+> tastiera/mouse/finestra e smistarli, esporre un Input statico, loggare, disegnare
+> l'interfaccia ImGui con il docking attivo (i viewport no, vedi D14), e — dal task `12` —
+> **far parlare il driver OpenGL** invece di ingoiare i suoi errori.
 > **Non disegna ancora nulla di suo:** non esiste un renderer.
 
 ---
@@ -356,6 +358,43 @@ implementabile ma richiederebbe di ri-puntare `glfwSetWindowUserPointer` al nuov
 di `m_Data`: finché nessuno ne ha bisogno, **`= delete` è più onesto di un move
 sottilmente rotto**.
 
+### Debug output di OpenGL
+
+`InitGLDebugOutput()` (in `Private/Ignis/Renderer/GLDebug.cpp`) registra una callback che
+il driver chiama a ogni errore, comportamento deprecato, UB o problema di prestazioni. La
+chiama `Window::Window` subito dopo il caricamento di GLAD, prima di qualunque altra `gl*`.
+
+```
+[IGNIS][ERROR] GL ERRORE [API] #1: GL_INVALID_ENUM in glEnable(GL_TEXTURE_2D)  (GLDebug.cpp:63)
+```
+
+> **Senza, un errore GL non ha sintomo.** La chiamata sbagliata ritorna, il programma
+> prosegue, e quello che vedi è uno schermo nero — o niente — molte righe dopo. È il
+> default silenzioso peggiore del progetto, perché non è nostro: sta dentro il driver.
+
+Tre cose non ovvie, tutte deliberate:
+
+- **Il contesto di debug si CHIEDE, non si ottiene.** `glfwWindowHint(GLFW_CONTEXT_DEBUG)`
+  è una richiesta come quella della versione: il driver può ignorarla. Per questo
+  `InitGLDebugOutput` rilegge `GL_CONTEXT_FLAGS` e cerca `GL_CONTEXT_FLAG_DEBUG_BIT`
+  invece di dare per buona l'intenzione — e se manca lo dice con un WARN. *Verificare
+  l'effetto, non il testo*, applicato al driver invece che al CMake.
+- **`GL_DEBUG_OUTPUT_SYNCHRONOUS` è metà del valore.** Senza, il driver può accodare i
+  messaggi e la callback scatta quando la chiamata colpevole è già uscita dallo stack.
+  Con, il breakpoint cade sulla riga giusta. Costa prestazioni: è solo in Debug.
+- **Le NOTIFICATION sono filtrate a livello GL.** Su NVIDIA sono un fiume a ogni
+  allocazione di buffer e annegherebbero i TRACE degli eventi. Il ramo nella callback
+  resta: per riaccenderle si toglie una riga sola.
+
+Non c'è `IGNIS_DEBUGBREAK()` sui messaggi ad alta severità, ed è una scelta: i messaggi
+HIGH arrivano anche dai backend ImGui e dal driver, e un trap all'avvio su una sola delle
+due macchine sarebbe un falso positivo costoso. La riga è commentata sul posto.
+
+Verificato su **entrambi i bersagli** con `glEnable(GL_TEXTURE_2D)` (illegale in core
+profile): riga ERROR presente. **Controtest:** commentando la sola
+`glDebugMessageCallback(...)` la riga sparisce e l'INFO di avvio resta — una variabile
+sola, quindi il test sa fallire.
+
 ### Input e keycode
 
 ```cpp
@@ -579,6 +618,18 @@ provvisorie e violano D11: sono le uniche `gl*` di tutto il progetto, e migreran
   che riscriverlo a memoria fra sei mesi.
 
 ## Trappole già pagate
+
+**`APIENTRY` sulla callback di debug non è decorazione.** `GLDEBUGPROC` (glad.h, riga 751)
+la dichiara `APIENTRY`, che su Windows vale `__stdcall` e su Linux è vuoto (righe 654-658).
+Su GCC la si può dimenticare senza accorgersene; MSVC rifiuta la conversione. È la classica
+divergenza che compila su una macchina e non sull'altra — vale per **ogni** callback passata
+a una libreria C, non solo per questa.
+
+**Il testo dei messaggi di debug lo scrive il driver, non noi.** Mesa cita la chiamata
+colpevole (`GL_INVALID_ENUM in glEnable(GL_TEXTURE_2D)`), NVIDIA usa una formulazione
+propria, e anche l'`id` numerico differisce. Un test che cercasse una stringa precisa
+passerebbe su una macchina e fallirebbe sull'altra: si verifica che **compaia una riga
+ERROR di tipo `ERRORE` da sorgente `[API]`**, non il suo contenuto.
 
 **Ordine di inclusione GLAD.** `<glad/glad.h>` deve sempre precedere `<GLFW/glfw3.h>`:
 GLAD definisce i simboli OpenGL che GLFW altrimenti dichiara per conto suo, e il conflitto

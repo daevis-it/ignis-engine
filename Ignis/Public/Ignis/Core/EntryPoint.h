@@ -2,6 +2,7 @@
 
 #include "Ignis/Core/Application.h"
 #include "Ignis/Core/Logger.h"
+#include "Ignis/Core/Paths.h"
 
 #include <cstdlib>
 #include <exception>
@@ -23,6 +24,12 @@ int main(int argc, char** argv)
     // farne. Non sono flusso di controllo, e non entrano nel game loop.
     try
     {
+        // Prima di tutto il resto, e dentro il try: se il sistema non sa dire dov'è
+        // l'eseguibile, nessun asset è raggiungibile e l'avvio deve fermarsi qui,
+        // dove c'è già chi raccoglie l'eccezione. Sta PRIMA di CreateApplication
+        // perché il client potrebbe volere un percorso già nel proprio costruttore.
+        Ignis::Paths::Init();
+
         // unique_ptr e non 'delete app': se Run() lancia, il delete non verrebbe
         // mai eseguito e l'Application resterebbe in piedi fino a fine processo.
         // argc/argv arrivano finalmente da qualche parte: erano i due warning

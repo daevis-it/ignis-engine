@@ -4,7 +4,7 @@ Game engine 2D/3D scritto da zero in C++20, con Editor visivo integrato.
 Progetto personale a scopo di apprendimento: capire il **perché** dei motori moderni
 costruendone uno, non replicarne le feature.
 
-> **Stato attuale — ITERAZIONE #2 IN CORSO (Fase 2, Renderer 2D). Ultimo task chiuso: `12`.**
+> **Stato attuale — ITERAZIONE #2 IN CORSO (Fase 2, Renderer 2D). Ultimo task chiuso: `13`.**
 > Fasi 0 e 1 complete (task `01`–`11`), chiuse il 2026-08-25.
 > Il progetto è stato ristrutturato da eseguibile monolitico a **tre target**
 > (`Ignis` libreria + `IgnisEditor` + `Sandbox`), con separazione **Public/Private** degli
@@ -358,6 +358,39 @@ implementabile ma richiederebbe di ri-puntare `glfwSetWindowUserPointer` al nuov
 di `m_Data`: finché nessuno ne ha bisogno, **`= delete` è più onesto di un move
 sottilmente rotto**.
 
+### RenderCommand
+
+Lo strato più sottile possibile sopra OpenGL: una funzione per verbo, nessuno stato,
+nessuna decisione.
+
+```cpp
+RenderCommand::SetViewport(0, 0, larghezza, altezza);
+RenderCommand::SetClearColor({ 0.9f, 0.1f, 0.6f, 1.0f });
+RenderCommand::Clear();
+```
+
+Non è l'astrazione multi-API di D7 — è D11/D17 applicati alle poche chiamate che non
+appartengono a nessuna classe wrapper, perché non possiedono una risorsa.
+**Nessun tipo OpenGL nelle firme:** chi include l'header non vede glad, non lo linka, e non
+sa quale API grafica c'è sotto. `GLint` e `GLsizei` vivono solo nel `.cpp`.
+
+`Clear()` pulisce **solo** il color buffer. Il depth entrerà quando ci sarà una profondità
+da azzerare: aggiungerlo adesso, senza depth buffer nel framebuffer, sarebbe una riga che
+non fa niente e sembra farlo.
+
+> **Il colore di sfondo è una scelta del CLIENT, e il punto in cui l'engine mette il
+> proprio default non è indifferente.** Sta nel costruttore di `Application`, non in
+> `Run()`: il costruttore della classe base gira *prima* del corpo del costruttore del
+> client, quindi un gioco che chiami `SetClearColor` nel proprio costruttore sovrascrive
+> il default. Con la stessa riga in `Run()`, l'engine ricablerebbe il colore **dopo** la
+> scelta del client, e quella scelta non avrebbe alcun effetto — senza un solo messaggio
+> d'errore. Verificato con due eseguibili e due colori inconfondibili: editor
+> verde-azzurro, Sandbox magenta.
+
+Che sia l'engine a pulire lo schermo è **impalcatura dichiarata**: al task `19` sarà la
+scena a decidere cosa c'è dietro. Non si toglie prima, perché un client che si dimenticasse
+di pulire vedrebbe spazzatura — default silenzioso, di nuovo.
+
 ### Debug output di OpenGL
 
 `InitGLDebugOutput()` (in `Private/Ignis/Renderer/GLDebug.cpp`) registra una callback che
@@ -583,11 +616,12 @@ la riga `ViewportsEnable` è commentata sul posto con la motivazione — vedi D1
 **I bug e i default silenziosi della revisione iniziale sono tutti chiusi.** Quel che resta
 è assenza, non rottura — e va detto con precisione:
 
-### Non c'è un renderer
+### Non c'è ancora un renderer
 
-L'engine apre una finestra, la pulisce con `glClearColor` e disegna ImGui. **Non sa
-disegnare niente di suo**: nessun `Shader`, nessun `Buffer`, nessuna `Texture`. È la Fase 2,
-ed è il contenuto dell'iterazione #2.
+Dal task `13` esiste il `RenderCommand`, che sa impostare il viewport, il colore di sfondo
+e pulire lo schermo. Ma **l'engine non sa ancora disegnare niente di suo**: nessuno
+`Shader`, nessun `Buffer`, nessun `VertexArray`, nessuna `Texture`. È la Fase 2, ed è il
+contenuto dell'iterazione #2.
 
 ### Debiti noti, con la loro condizione
 
@@ -601,9 +635,12 @@ costo a runtime — contesto, font, `NewFrame`/`Render` — ma i simboli restano
 (~1000 in `Sandbox`). Per farli sparire davvero serve separare ImGui a livello di build,
 lavoro che ha senso quando ci sarà una pipeline di packaging vera (Fase 5).
 
-**Le tre chiamate GL in `Application.cpp`** (`glViewport`, `glClearColor`, `glClear`) sono
-provvisorie e violano D11: sono le uniche `gl*` di tutto il progetto, e migreranno nel
-`RenderCommand` al task `13`. Sono annotate sul posto.
+**Restano due `gl*` fuori dal perimetro di D17, in `Window.cpp`:** `gladLoadGLLoader` e le
+tre `glGetString` che stampano vendor, renderer e versione all'avvio. Non sono disegno —
+sono l'inizializzazione del contesto, e stanno dove il contesto nasce. Le lasciamo lì
+consapevolmente: spostarle significherebbe inventare un `RendererContext` per tre righe
+informative. **È l'unica eccezione nota al grep**, quindi va detta invece di far sembrare
+il perimetro più pulito di com'è.
 
 ### Impalcatura dichiarata, che aspetta il suo tetto
 
@@ -618,6 +655,22 @@ provvisorie e violano D11: sono le uniche `gl*` di tutto il progetto, e migreran
   che riscriverlo a memoria fra sei mesi.
 
 ## Trappole già pagate
+
+**CLion non usa i preset finché non glielo dici, e non te lo dice.** All'apertura del
+progetto crea un profilo CMake suo, che builda in `cmake-build-debug/` invece che in
+`build/<preset>/`. Tutto funziona, quindi non te ne accorgi: semplicemente stai compilando
+in un albero **configurato da CLion e non dal repo**, con la sua toolchain e i suoi flag al
+posto di quelli dichiarati in `CMakePresets.json`. Due build tree, due download di
+FetchContent, e i preset che documentiamo qui li usa solo chi compila da terminale.
+
+> **È la stessa famiglia di errori dell'albero assemblato da epoche diverse, spostata sulla
+> build:** ciò che provi non è ciò che il repo descrive, e la differenza non produce nessun
+> messaggio. Se un giorno un flag dei preset (`/utf-8`, `-Wall`, `IGNIS_DEBUG`) facesse la
+> differenza, la faresti solo tu e solo su una macchina.
+
+I preset di `CMakePresets.json` vanno abilitati nei profili CMake di CLion, e vale su
+**entrambi** i sistemi: la stessa trappola è identica su Windows. `cmake-build-*/` è nel
+`.gitignore`, quindi il vecchio albero non è mai finito nel repo — si cancella e basta.
 
 **`APIENTRY` sulla callback di debug non è decorazione.** `GLDEBUGPROC` (glad.h, riga 751)
 la dichiara `APIENTRY`, che su Windows vale `__stdcall` e su Linux è vuoto (righe 654-658).

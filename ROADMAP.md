@@ -47,6 +47,12 @@ valle: una base propria per piccoli giochi indie e per insegnare game dev.
 
 | D17 | **Il perimetro di D11 è il modulo Renderer, non solo le cinque classi** | Deciso il 2026-08-26 | D11 elenca `Shader`, `Buffer`, `Texture`, `VertexArray`, `Framebuffer` — cioè le classi che possiedono una *risorsa*. Ma due punti del renderer chiamano GL senza possedere niente: il **debug output** (`glDebugMessageCallback`, task `12`) e il **RenderCommand** (`glViewport`, `glClear`, `glDrawElements`, task `13`). Non sono un'eccezione a D11, sono la sua lettura corretta: la regola vera è *nessuna chiamata GL fuori da `Ignis/Private/Ignis/Renderer/`*. Fuori da lì — `Application`, `Window`, i layer, i client — `gl*` resta vietato, e oggi le tre chiamate in `Application.cpp` sono l'unica violazione aperta. |
 
+| D18 | **Uno shader è UN file `.glsl` con sezioni `#section`, non due file** | Deciso il 2026-08-27 | Due file (`.vert` + `.frag`) costano meno codice oggi e più attrito dopo: **una pipeline di asset vuole un asset = un file**. Alla Fase 5, con VFS, handle e content browser, due file significano due percorsi nel registro, due mtime da confrontare per l'hot-reload, due file da rinominare insieme e la possibilità che uno esista senza l'altro. È il motivo per cui Unity ha ShaderLab e Godot `.gdshader`. Il costo — un parser — non è il problema: sono trenta righe. Il problema sono i tre dettagli qui sotto, che decidono se il formato è onesto o subdolo. |
+| D18a | **Il marcatore è `#section`, non `#pragma`** | Deciso il 2026-08-27 | `#pragma` è GLSL **legale**: se un bug del parser lo lasciasse dentro la stringa, il driver lo ignorerebbe **in silenzio** e compileresti una sezione sbagliata senza saperlo. `#section` non è GLSL — se arriva al driver, il driver protesta. Il formato si autodenuncia. |
+| D18b | **Ogni fallimento del parser è rumoroso** | Deciso il 2026-08-27 | Un mini-formato diventa debito quando "sbagliato" e "vuoto" si assomigliano. Trattati esplicitamente, un `if` ciascuno: nessun `#section` nel file → errore (**non** "assumo sia tutto vertex"); nome di sezione sconosciuto → errore che elenca cosa è supportato; stessa sezione due volte → errore (non "vince l'ultima"); manca `vertex` o `fragment` → errore. Il caso peggiore è quello che non fallisce: buttare via in silenzio del codice scritto da qualcuno. |
+| D18c | **`#line` in testa a ogni sezione, e un preambolo condiviso** | Deciso il 2026-08-27 | Spezzando il file, il driver conta le righe **dalla sezione**: un errore alla riga 40 di `basic.glsl` viene riportato come "riga 12", e lo cerchi nel posto sbagliato. Un `#line` in testa a ogni sezione fa riportare al driver i numeri del file originale. **Da verificare su entrambe le macchine**: la formulazione della spec GLSL su `#line` è cambiata fra versioni (la riga successiva vale `line` oppure `line + 1`) e i driver possono seguire l'una o l'altra — se divergono di uno, compensiamo noi. Nota: `#line` in GLSL accetta **solo interi**, non il nome del file come in C. Il testo prima del primo `#section` è un **preambolo** anteposto a tutte le sezioni: `#version 450 core` si scrive una volta sola invece di due che prima o poi divergono, ed è il posto naturale per struct e costanti condivise. Il preambolo sposta i numeri di riga, quindi va contato nel `#line`. |
+| D19 | **Gli asset arrivano accanto all'eseguibile con `add_custom_command`, a ogni build** | Deciso il 2026-08-27 | D15 risolve i percorsi rispetto all'eseguibile, quindi gli asset devono davvero stare lì: altrimenti `Paths::Resolve` punta al nulla, correttamente e inutilmente. `file(COPY)` al **configure** è la trappola: modifichi lo shader, ricompili, e gira ancora quello vecchio **senza nessun errore**. Il symlink alla cartella sorgente darebbe iterazione istantanea, ma su Windows sono junction e vogliono privilegi o developer mode — divergenza fra i due sistemi dove non serve. Costo accettato: modificare uno shader richiede una build (che però copia e basta, non ricompila). L'hot-reload vero leggerà dal sorgente, ed è Fase 4/5. |
+
 ### Decisioni rimandate
 
 - **`imgui.ini` è relativo alla directory di lavoro** — ImGui salva lì il layout dei
@@ -251,18 +257,24 @@ occhio.**
 | # | Task | Verifica |
 |---|---|---|
 | `12` | Contesto di debug OpenGL, `glDebugMessageCallback` nel Logger | **CHIUSO 2026-08-26**, verificato su Linux/GCC e Windows/MSVC: `glEnable(GL_TEXTURE_2D)` produce la riga ERROR; **controtest** superato (via la sola `glDebugMessageCallback` → la riga sparisce). Release non ancora eseguita su nessuno dei due. |
-| `13` | `RenderCommand` + `Renderer`; le tre `gl*` escono da `Application.cpp` | zero `gl*` in `Application.cpp`; il colore di sfondo si cambia da una riga del client |
-| `14` | `Shader` (RAII, copy `= delete`, move; uniform via `glProgramUniform*`) | shader con errore di sintassi → messaggio del driver e fallimento rumoroso; **controtest**: shader valido passa |
+| `13` | `RenderCommand`; le tre `gl*` escono da `Application.cpp` | **CHIUSO 2026-08-26**, Linux/GCC (Debug **e Release**) e Windows/MSVC: zero `gl*` e zero `glad` in `Application.cpp`, editor verde-azzurro e Sandbox magenta. Il `Renderer` che questa riga prometteva **è stato spostato al `17`**: senza camera né shader sarebbe stato un guscio vuoto la cui forma avremmo indovinato prima di avere i dati veri. |
+| `14a` | `Paths` (D15): risoluzione dei percorsi rispetto all'eseguibile, `io.IniFilename` | il percorso loggato all'avvio è **identico** lanciando da tre cwd diverse, e `imgui.ini` nasce accanto all'eseguibile; **controtest**: prima della modifica nasceva in tre posti diversi |
+| `14b` | `Shader` (RAII, copy `= delete`, move; uniform via `glProgramUniform*`), parser `#section` (D18), copia asset (D19) | shader con errore di sintassi → messaggio del driver **col numero di riga giusto del `.glsl`** e fallimento rumoroso; **controtest**: shader valido passa. Più i quattro fallimenti del parser di D18b, uno per volta |
 | `15` | `VertexBuffer`, `IndexBuffer`, `BufferLayout` (`glCreateBuffers`, `glNamedBufferStorage`) | stride e offset calcolati dal layout uguali a valori attesi **distinti** (tipi diversi, niente 4/4/4) |
 | `16` | `VertexArray` (`glVertexArrayAttribFormat` / `AttribBinding`) | **un quad colorato a schermo** |
-| `17` | `OrthographicCamera` — primo uso vero di GLM | il quad resta quadrato al resize; muovendo la camera si sposta in senso **opposto** |
+| `17` | `OrthographicCamera` **+ `Renderer` con `BeginScene`/`EndScene`** — primo uso vero di GLM | il quad resta quadrato al resize; muovendo la camera si sposta in senso **opposto** |
 | `18` | `Texture2D` + `stb_image` | quad texturato; **controtest**: file mancante → errore esplicito, non una texture bianca |
 | `19` | `Renderer2D` con batching + `Renderer2D::Stats` | 1000 quad → `DrawCalls == 1`; **controtest**: con limite 20000, disegnarne 20001 → `DrawCalls == 2` |
 | `20` | Slot di texture nel batch (32 sampler, indice per vertice) | due texture diverse e due tinte diverse in **una** draw call |
 | `21` | Chiusura: pulizia contestuale, README, ROADMAP, commit | — |
 
+Il `14` è stato **spaccato in `14a` e `14b`** il 2026-08-27: caricare uno shader da file
+può fallire per due ragioni diverse — il file non trovato, o il file non compilato — e non
+si muovono due variabili insieme. Con `14a` chiuso, un fallimento del `14b` ha una causa sola.
+
 Decisioni prese all'apertura: **D15** (percorsi relativi all'eseguibile), **D16** (il quad
-lo disegna il `Sandbox`), **D17** (perimetro di D11).
+lo disegna il `Sandbox`), **D17** (perimetro di D11). Poi **D18** e **D19** (formato degli
+shader e copia degli asset), il 2026-08-27.
 
 **Debito saldato in apertura:** il README diceva il falso in sei punti (OpenGL 3.3 in tre
 posti fra cui D3, un blocco `### Window` e uno `### Input` rimasti da prima dei task `05b`

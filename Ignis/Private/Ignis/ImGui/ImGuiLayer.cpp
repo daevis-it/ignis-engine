@@ -1,7 +1,10 @@
 #include "Ignis/ImGui/ImGuiLayer.h"
 #include "Ignis/Core/Application.h"
 #include "Ignis/Core/Logger.h"
+#include "Ignis/Core/Paths.h"
 #include "Ignis/Core/Window.h"
+
+#include <string>
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -10,11 +13,31 @@
 
 namespace Ignis
 {
+    namespace
+    {
+        // ImGui NON copia la stringa: io.IniFilename è un const char* che tiene
+        // (imgui.h riga 2532). Il buffer deve quindi sopravvivere al contesto, e un
+        // temporaneo lascerebbe un puntatore penzolante — che si manifesterebbe come
+        // un file con un nome di spazzatura, o peggio come niente del tutto.
+        // Uno solo perché di ImGuiLayer ne esiste uno solo: è un overlay creato da
+        // Application quando EnableImGui è true.
+        std::string s_PercorsoIni;
+    }
+
     void ImGuiLayer::OnAttach()
     {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
+
+        // Il layout dei pannelli (posizioni, dimensioni, struttura del docking) va
+        // ACCANTO ALL'ESEGUIBILE, non nella directory di lavoro. Il default di ImGui
+        // è "imgui.ini" relativo alla cwd — quindi oggi il file nasce dove lanci, e
+        // il giorno del Launcher nascerebbe DENTRO la cartella del progetto aperto:
+        // un layout diverso per progetto, con i pannelli che si spostano a seconda
+        // di cosa apri. D15 lo risolve senza che serva aspettare la Fase 5.
+        s_PercorsoIni  = Paths::ToUtf8(Paths::Resolve("imgui.ini"));
+        io.IniFilename = s_PercorsoIni.c_str();
 
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
